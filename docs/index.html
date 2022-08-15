@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+
+<!-- my style file (remove for codepen) -->
+<link rel="stylesheet" href="index.css" />
+
+<!-- divs -->
+<div id="outputDrawingWrapper">
+  <div id="outputDrawing"></div>
+  <div id="outputDrawingInfo"></div>
+  <div id="openConfig">
+    settings
+  </div>
+  <div id="configs">
+    <div id="closeConfig">
+      close settings
+    </div>
+    <div id="configScrollWrapper">
+      <div id="toggleRemoveOtherNodes" class="toggle">hide secondary nodes</div>
+      <div id="toggleRemoveOtherChans" class="toggle">show secondary channels</div>
+      <div id="toggleFullScreen" class="toggle">toggle full screen</div>
+      <div id="toggleDarkMode" class="toggle">toggle dark mode</div>
+    </div>
+  </div>
+</div>
+<div id="expandedTags"></div>
+<input id="expNew" list="bestsuggestions" autocomplete="off" placeholder="add by alias or pubkey" />
+<datalist id="bestsuggestions"></datalist>
+<div id="outputText"></div>
+
+<div id="debugText"></div>
+
+<!-- ipfs library, used via global Ipfs -->
+<script
+  src="https://cdn.jsdelivr.net/npm/ipfs-core@0.15.4/dist/index.min.js"
+  integrity="sha256-BOLUCfwJIrl77f7h7q0mPaoJsOOrc+eE/i+XqTQSIJM="
+  crossorigin="anonymous"
+></script>
+<!-- readable ipfs-core -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/ipfs-core@0.15.4/dist/index.min.js"></script> -->
+<!-- minified ipfs-core -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/ipfs-core/dist/index.min.js"></script> -->
+<!-- original one I used -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/ipfs/dist/index.min.js"></script> -->
+
+<!-- visualization library, used via global vis -->
+<script>
+  // fixing vis calling ctx.circle error...
+  CanvasRenderingContext2D.prototype.circle = function (...args) {
+    const [x, y, radius] = args
+    this.beginPath()
+    this.arc(x, y, radius, 0, 2 * Math.PI, false)
+  }
+</script>
+<!-- <script src="https://unpkg.com/vis-network@9.1.2/standalone/umd/vis-network.js"></script> -->
+<script src="https://unpkg.com/vis-network@9.1.2/standalone/umd/vis-network.min.js"></script>
+
+<!-- json viewer library, used vvia global BigJsonViewerDom -->
+<script src="https://unpkg.com/big-json-viewer@0.1.7/dist/browser-api.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/big-json-viewer@0.1.7/dist/default.css" />
+
+<!-- compression/decompression npm pako lib, for both nodejs and webjs -->
+<script src="https://cdn.jsdelivr.net/pako/1.0.3/pako.min.js"></script>
+
+<!-- main script -->
+<script type="text/javascript" defer>
+  const { keys, values, entries } = Object
+  const { max, min, trunc, ceil, floor, round } = Math
+
+  const graphIPNS = '12D3KooWScrMbdX4eCmfjT2BM2iyX1Nf8rrUZUYNjvHNKtwxfBzD'
+
+  // const graphCids = [
+  //   // 8.4 mb graph { nodes, channels }
+  //   'Qme5hCy1dh6dX6ufUTPMMM7ddGJfo8ufj67UsU6TrU1hM9'
+  // ]
+
+  // OLD
+  // ipfs CID codes for [nodes, channels]
+  // const CIDs = [
+  //   // nodes ~1.2 MB compressed
+  //   'QmU211Tm8BhawbT9B2Exi6kuQtAeSHYUZQXtziCLZ3Rpez',
+  //   // channels ~7.2 MB compressed (neutrino lnd, lacks on-chain info)
+  //   'QmS3mnjFthrNKVJ2TbccRCgaf1uvsszDhH4c4MNT5QxGek'
+  // ]
+
+  const searchParams = new URL(document.location).searchParams
+  const areStartingNodesProvided = !!searchParams.getAll('node').length
+  const startingNodes = areStartingNodesProvided
+    ? // we can get starting nodes from query string in url e.g. ?node=pubkey1&node=pubkey2&node=pubkey3
+      searchParams.getAll('node')
+    : // adding few first expanded small nodes to use as initial examples
+      [
+        // '02e8980ad9bf9fca93e306e774c480cbcf36d8afde2a80a797314a70b19690b06c', // PrentizMN
+        '020e6dd9f90cc37f2a7b5e881b6ecb6fe07f60d86416f34c63d8264356649fd8cb', // kycjelly
+        '03387ffd0c54c78604fe0bfba1714655a8f77b266346911f1923946c54e8d3318c', // animal plebnet
+        '028e9e578efe5f09f3edfd98ef0fad51007014401d8b7ff62236b89d6867529635' // sweet16joe
+        // '03c7b849b67f8c5fdbc3bc2d140bf45924d7492a687ede91d3dd67570f50b62abe' // WBD
+      ]
+
+  // initial async script running on load
+  const run = async () => {
+    // 2 different names
+    const ipfsLib = window.Ipfs || window.IpfsCore
+    console.log({ ipfsLib })
+
+    // launch in-browser ipfs node
+
+    try {
+      // uncomment to delete indexedDB database cache
+      // await cleanIndexedDB()
+
+      // localStorage.debug = 'ipfs*' // full debug package logs in console
+      // localStorage.removeItem('debug') // remove debug logs from console
+
+      logD('IPFS: initializing browser node...')
+      window.ipfsNode = await ipfsLib.create({
+        Routing: { Type: 'dhtclient' },
+        // Pubsub: { Router: 'gossipsub', Enabled: true },
+        EXPERIMENTAL: { ipnsPubsub: true },
+        Ipns: { UsePubsub: true },
+        dht: true
+        // config: {
+        //   Swarm: {
+        //     ConnMgr: {
+        //       Type: 'basic',
+        //       LowWater: 3,
+        //       HighWater: 10,
+        //       GracePeriod: '40s'
+        //     }
+        //   }
+        // }
+      })
+
+      console.log({ ipfsLib, ipfsNode })
+      console.log('IPFS config used', await ipfsNode.config.getAll())
+    } catch (e) {
+      logD('IPFS loading aborted due to error:', e)
+      console.error(e)
+      if (e.code === 'ERR_DB_OPEN_FAILED') {
+        logD(
+          [
+            'browser indexedDB unaccessible:',
+            '  in chrome if you see crossed-out eye icon in address bar, click that to enable cookies for IPFS to work',
+            `  in brave premine scam browser, turn off "shield" on right side of address bar for IPFS to work`,
+            '  or try firefox, chromium, or guest profile in chrome'
+          ].join('\n')
+        )
+      }
+      return null
+    }
+
+    // get most recent graph cid strings from static IPNS unless cid provided in url
+    const isCidProvided = searchParams.getAll('cid').length
+    if (isCidProvided) logD(`loading cid in url`, searchParams.getAll('cid')[0])
+    const graphCids = isCidProvided ? searchParams.getAll('cid') : await getFromIPNS(graphIPNS)
+    // const graphCids = ['QmWo5XAJ5jVwsKZZrpyYmGAsfKwynwMwprEuq8sbJ7iMbN']
+
+    // download graph from CIDs provided
+    const resources = await getFromIPFS(graphCids)
+    const graphRaw = (window.graphRaw = resources[0])
+    const { nodes, channels, updated_at, updated_at_UTC } = graphRaw
+    console.log(`graph timestamp is ${updated_at_UTC} UTC, now ${new Date().toISOString()}`)
+    window.gNodes = nodes
+    window.gChannels = channels
+
+    // ipfsNode.stop() // stop ipfs node
+    // slow down ipfs node
+    await ipfsNode.config.set('Swarm.ConnMgr', {
+      Type: 'basic',
+      LowWater: 3,
+      HighWater: 6,
+      GracePeriod: '40s'
+    })
+    console.log('IPFS config.Swarm.ConnMgr updated', await ipfsNode.config.get('Swarm.ConnMgr'))
+
+    // more friendly & faster lookup graph w/ hashtables
+    const graph = (window.graph = summarizeGraph({ nodes, channels }))
+
+    // my states to track
+    // nodes can be
+    // added|not-added - added to visualization
+    // hidden|visible - rendered in visualization
+    // expanded|not-expanded - all its peers shown
+    const s = (window.s = {
+      // to check browser state bc js/drawing breaks if loads in hidden tab
+      isVisible: document.visibilityState !== 'hidden',
+      // 'light' or 'dark' color scheme
+      colorScheme:
+        localStorage.getItem('colorScheme') === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light',
+      // easy access to dark-style <style> element here when used
+      colorSchemeStyleEl: undefined,
+      // whether items are added to visualizer
+      addedNodes: {}, // pubkey: {[peerkey]: true}
+      addedChannels: {}, // pubkeys.join(','): [pk1, pk2]
+      // whether items are visible
+      visibleNodes: {}, // pubkey: true
+      visibleChannels: {}, // pubkeys.join(','): true
+      // whether channels are expanded
+      isExpanded: {}, // pubkey: true
+      // whether channels belong to expanded node
+      fromExpanded: {},
+      // whether we allow nodes without expanded peers
+      hideNodesWithoutExpandedPeers: false,
+      // whether we allow channels between non-expanded peers
+      removeChannelsOfNonExpanded: true
+    })
+
+    // infinite issues come up when loading while in hidden tab so listen for it
+    // https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API
+    document.addEventListener(
+      'visibilitychange',
+      e => {
+        if (document.visibilityState === 'hidden') {
+          s.isVisible = false
+          console.log('document hidden')
+          visDrawing.stopSimulation()
+          visDrawing.renderer.allowRedraw = false
+        } else {
+          s.isVisible = true
+          console.log('document not hidden')
+          visDrawing.renderer.allowRedraw = true
+          visDrawing.startSimulation()
+        }
+      },
+      false
+    )
+
+    // load up the visjs network drawing when tab visible
+    while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+    const visDrawing = new vis.Network(
+      window.outputDrawing,
+      {
+        nodes: visNodes,
+        edges: visChannels
+      },
+      visOptions
+    )
+
+    // take array of pubkeys and add nodes from graph to vis
+    const addGraphNodesToVis = newPubKeys => {
+      const newVisNodesToAdd = []
+      for (const newPubkey of newPubKeys) {
+        if (!s.addedNodes[newPubkey]) {
+          const gNode = graph[newPubkey]
+          const mainColor = gNode.color
+          newVisNodesToAdd.push({
+            id: newPubkey,
+            label: `${gNode.alias || gNode.public_key.slice(0, 20)}\n${gNode.channelCount}`,
+            title: getNodeSummary(newPubkey),
+            mainColor,
+            x: 0, // initial position, must be removed later
+            y: 0 // initial position, must be removed later
+          })
+          // register in state w/ pubkey as key and peer pubkeys as value
+          s.addedNodes[newPubkey] = keys(gNode.channels).reduce((m, v) => ((m[v] = true), m), {})
+        }
+      }
+      if (newVisNodesToAdd.length) visNodes.add(newVisNodesToAdd)
+    }
+    window.addGraphNodesToVis = addGraphNodesToVis
+
+    // remove nodes from vis via array of public keys
+    const removeNodesFromVis = pubkeys => {
+      const newVisNodesToRemove = pubkeys
+      for (const eachPubKey of pubkeys) {
+        delete s.addedNodes[eachPubKey]
+        delete s.isExpanded[eachPubKey]
+        delete s.visibleNodes[eachPubKey]
+      }
+      if (newVisNodesToRemove.length) visNodes.remove(newVisNodesToRemove)
+    }
+
+    // add to visualization from array of [pubkey1, pubkey2]
+    const addGraphChannelsToVis = newChannelPeers => {
+      let countAdded = 0
+      const newVisChannelsToAdd = []
+      for (const newPubkeys of newChannelPeers) {
+        // id is pubkey keys sorted in increasing order joined by ","
+        const chanId = newPubkeys.sort().join(',')
+        const node1 = graph[newPubkeys[0]]
+        const node2 = graph[newPubkeys[1]]
+        if (!s.addedChannels[chanId]) {
+          const mainColor = avgHex(node1.color, node2.color) // avg of both nodes
+          newVisChannelsToAdd.push({
+            from: node1.public_key,
+            to: node2.public_key,
+            color: {
+              color: mainColor
+            },
+            mainColor,
+            id: chanId,
+            title: getEdgeSummary(chanId)
+          })
+          // add to state's quick lookup table
+          s.addedChannels[chanId] = [node1.public_key, node2.public_key]
+          countAdded++
+        }
+      }
+      if (newVisChannelsToAdd.length) visChannels.add(newVisChannelsToAdd)
+      return countAdded
+    }
+
+    // remove channels from visualization (by id or [publickey1, publickey2])
+    const removeChannelsFromVis = peerChannelsToRemove => {
+      let countRemoved = 0
+      const channelIdsToRemove = []
+      for (const pair of peerChannelsToRemove) {
+        const chanId = typeof pair === 'string' ? pair : pair.sort().join(',')
+        if (s.addedChannels[chanId]) {
+          channelIdsToRemove.push(chanId)
+          delete s.addedChannels[chanId]
+          countRemoved++
+        }
+      }
+      if (channelIdsToRemove.length) visChannels.remove(channelIdsToRemove)
+      return countRemoved
+    }
+
+    const expandNode = selectedPubKey => {
+      // adding many new nodes is resource heavy so stop physics until everything ready
+      visDrawing.stopSimulation()
+      visDrawing.renderer.allowRedraw = false
+
+      // let this take in array
+      if (Array.isArray(selectedPubKey)) return selectedPubKey.forEach(k => expandNode(k))
+      // work on single pubkey now
+      s.isExpanded[selectedPubKey] = true
+      const graphNode = graph[selectedPubKey]
+      const nodesToAdd = []
+      const channelsToAdd = []
+      for (const peerPubKey in graphNode.channels) {
+        nodesToAdd.push(peerPubKey)
+        channelsToAdd.push([selectedPubKey, peerPubKey])
+      }
+      addGraphNodesToVis(nodesToAdd)
+      addGraphChannelsToVis(channelsToAdd)
+    }
+    window.expandNode = expandNode
+
+    const unexpandNode = selectedPubKey => {
+      delete s.isExpanded[selectedPubKey]
+      // cleanup in finalizeVisualization()
+    }
+
+    // parse nodes to finalize what we see
+    const finalizeVisualization = async () => {
+      // wait until browser tab is open and visible for js to work
+      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+
+      // update buttons
+      toggleRemoveOtherChans.innerHTML = s.removeChannelsOfNonExpanded
+        ? 'show secondary channels'
+        : 'hide secondary channels'
+      toggleRemoveOtherNodes.innerHTML = s.hideNodesWithoutExpandedPeers
+        ? 'show secondary nodes'
+        : 'hide secondary nodes'
+
+      // set correct color scheme
+      handleColorScheme()
+
+      // remove all nodes not connected to an expanded node
+      // this will include nodes not connected to any visualized node
+      const listOfLoneNodes = []
+      for (const pubkey in s.addedNodes) {
+        // if node is expanded it stays
+        if (s.isExpanded[pubkey]) continue
+        let foundExpandedPeer = false
+        for (const peerkey in s.addedNodes[pubkey]) {
+          // if peer part of visualization & expanded, pubkey node stays
+          if (s.addedNodes[peerkey] && s.isExpanded[peerkey]) {
+            foundExpandedPeer = true
+            break
+          }
+        }
+        if (!foundExpandedPeer) listOfLoneNodes.push(pubkey)
+      }
+      console.log(`${listOfLoneNodes.length} unattached nodes removed`)
+      if (listOfLoneNodes.length) removeNodesFromVis(listOfLoneNodes)
+
+      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+
+      // remove all channels where either peer is no longer visualized
+      const listOfBrokenChannels = []
+      for (const chanId in s.addedChannels) {
+        const isInVis1 = !!s.addedNodes[s.addedChannels[chanId][0]]
+        const isInVis2 = !!s.addedNodes[s.addedChannels[chanId][1]]
+        if (!isInVis1 || !isInVis2) listOfBrokenChannels.push(chanId)
+      }
+      console.log(`${listOfBrokenChannels.length} broken channels removed`)
+      if (listOfBrokenChannels.length) removeChannelsFromVis(listOfBrokenChannels)
+
+      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+
+      // check for secondary channels to add or remove
+      const channelsToTryAdding = []
+      const channelsToTryRemoving = []
+      s.fromExpanded = {}
+      for (const pubkey in s.addedNodes) {
+        // check if any peer is also added
+        // if both exist, add channel to visualization if there isn't one
+        for (const peerkey in s.addedNodes[pubkey]) {
+          if (s.addedNodes[peerkey]) {
+            // both nodes are part of visualization
+            if (s.isExpanded[pubkey] || s.isExpanded[peerkey]) {
+              // this is channel connected to expanded node
+              const chanId = [peerkey, pubkey].sort().join(',')
+              s.fromExpanded[chanId] = true
+              continue
+            }
+            // if neither are expanded this is 2nd order channel
+            if (s.removeChannelsOfNonExpanded) {
+              channelsToTryRemoving.push([peerkey, pubkey])
+            } else {
+              channelsToTryAdding.push([peerkey, pubkey])
+            }
+          }
+        }
+      }
+      if (s.removeChannelsOfNonExpanded) {
+        const countRemoved = removeChannelsFromVis(channelsToTryRemoving)
+        console.log(`${countRemoved} second order channels removed`)
+      } else {
+        const countAdded = addGraphChannelsToVis(channelsToTryAdding)
+        console.log(`${countAdded} new second order channels added`)
+      }
+
+      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+
+      // determine hidden status of non-common peers
+      s.visibleNodes = {}
+      s.visibleChannels = {}
+      if (s.hideNodesWithoutExpandedPeers) {
+        // make a temp new list of all added peers starting at count 0
+        const countExpandedPeers = keys(s.addedNodes).reduce((m, v) => ((m[v] = 0), m), {})
+        // go through expanded-connected channels and add counts to both ends
+        for (const chanId in s.fromExpanded) {
+          const nodeKeysOfChannel = s.addedChannels[chanId]
+          countExpandedPeers[nodeKeysOfChannel[0]] += 1
+          countExpandedPeers[nodeKeysOfChannel[1]] += 1
+        }
+        console.log({ countExpandedPeers })
+        // record which nodes should stay visible
+        for (const pubkey in s.addedNodes) {
+          const hasMultipleExpandedPeers = countExpandedPeers[pubkey] > 1
+          const isVisible = !!hasMultipleExpandedPeers || !!s.isExpanded[pubkey]
+          s.visibleNodes[pubkey] = isVisible
+        }
+        console.log({ visibleNodes: s.visibleNodes })
+        // record which channels should stay visible
+        for (const chanId in s.fromExpanded) {
+          // out of expanded-connected channels
+          // need to check that both sides are visible nodes
+          const nodeKeysOfChannel = s.addedChannels[chanId]
+          const isVisible = s.visibleNodes[nodeKeysOfChannel[0]] && s.visibleNodes[nodeKeysOfChannel[1]]
+          s.visibleChannels[chanId] = isVisible
+        }
+        console.log({ visibleChannels: s.visibleChannels })
+      } else {
+        // set all added nodes & channels to visible
+        s.visibleNodes = s.addedNodes
+        s.visibleChannels = s.addedChannels
+      }
+
+      // bit different rules needed if hiding nodes/channels to stabilize ok
+      const countShownChannels = values(s.visibleChannels).filter(v => v).length
+      const countShownNodes = values(s.visibleNodes).filter(v => v).length
+      // lets define types of modes: complex, small, and default
+      const isComplexScene = countShownChannels > 2000
+      const isSmallScene = countShownChannels < 21 || s.hideNodesWithoutExpandedPeers
+
+      const compStyle = getComputedStyle(document.documentElement)
+      const [
+        colorText,
+        colorDebug,
+        colorData,
+        colorBackground,
+        colorTags,
+        colorTagsDelete,
+        colorOutlines,
+        colorHover,
+        colorActive
+      ] = [
+        '--colorText',
+        '--colorDebug',
+        '--colorData',
+        '--colorBackground',
+        '--colorTags',
+        '--colorTagsDelete',
+        '--colorOutlines',
+        '--colorHover',
+        '--colorActive'
+      ].map(prop => compStyle.getPropertyValue(prop)?.trim())
+
+      // apply styling to nodes
+      const visualizedNodes = visNodes.get()
+      for (const visNode of visualizedNodes) {
+        const pk = visNode.id
+        visNode.size = s.isExpanded[pk] ? 18 : 8
+
+        // all colors
+        const safeMainColor = clrCheck(visNode.mainColor)
+        const nodeBackgroundsColor = s.isExpanded[pk] ? safeMainColor : avgHex(safeMainColor, colorBackground, 0.25)
+        visNode.color = { background: nodeBackgroundsColor, border: s.isExpanded[pk] ? colorText : safeMainColor }
+        visNode.color.highlight = { background: nodeBackgroundsColor, border: colorText } // when selected lol
+        visNode.color.hover = { background: nodeBackgroundsColor, border: colorText } // when highlighted lol
+        if ((visNode.font = s.isExpanded[pk])) {
+          visNode.font = {
+            color: colorText,
+            strokeColor: colorBackground,
+            size: 27,
+            strokeWidth: 7,
+            bold: true
+          }
+        } else {
+          visNode.font = {
+            color: colorText,
+            // strokeColor: colorBackground, // too slow
+            size: 18,
+            // strokeWidth: 6, // too slow
+            strokeWidth: 0, // to undo expanded setting
+            bold: true
+          }
+        }
+
+        // physics
+        visNode.hidden = !s.visibleNodes[pk]
+        visNode.physics = !visNode.hidden
+        visNode.x = undefined // remove initial position now
+        visNode.y = undefined // remove initial position now
+      }
+
+      // apply styling to channels
+      const visualizedChans = visChannels.get()
+      for (const visEdge of visualizedChans) {
+        // color of primary vs secondary channels
+        visEdge.color ??= {}
+        visEdge.color.color = s.fromExpanded[visEdge.id] // depends on if of expanded node
+          ? avgHex(visEdge.mainColor, colorBackground, 0.75) // slight dim for primary channels
+          : avgHex(visEdge.mainColor, colorBackground, 0.25) // heavy dim for secondary channels
+        visEdge.color.hover = '#FF9900' // hover color
+        visEdge.color.highlight = '#FF9900' // selected color
+        visEdge.hidden = !s.visibleChannels[visEdge.id]
+
+        visEdge.physics = s.fromExpanded[visEdge.id] && !visEdge.hidden ? true : false
+        // visEdge.physics = !visEdge.hidden
+        // simplify edge if physics is disabled (e.g. hidden or secondary channel)
+
+        visEdge.smooth = visEdge.physics ? { type: 'dynamic' } : false
+        visEdge.smooth = isComplexScene ? false : visEdge.smooth
+      }
+
+      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+
+      visNodes.updateOnly(visualizedNodes)
+      visChannels.updateOnly(visualizedChans)
+
+      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+
+      if (isComplexScene) {
+        visDrawing.setOptions({ physics: complexScenePhysics })
+        console.log('using complexScenePhysics', JSON.stringify(complexScenePhysics, null, 2))
+      } else if (isSmallScene) {
+        visDrawing.setOptions({ physics: smallSetPhysics })
+        console.log('using smallSetPhysics', JSON.stringify(smallSetPhysics, null, 2))
+      } else {
+        const clamp = (num, low, high) => min(max(num, low), high)
+        const copy = item => JSON.parse(JSON.stringify(item))
+        const options = copy({ physics: defaultPhysics }) // deep copy
+        options.physics.forceAtlas2Based.theta = clamp(Math.exp(-100 / countShownNodes), 0.5, 0.96)
+        options.physics.forceAtlas2Based.damping = options.physics.forceAtlas2Based.theta
+        options.physics.forceAtlas2Based.avoidOverlap = 0.001
+        visDrawing.setOptions(options)
+        console.log('using defaultPhysics', JSON.stringify(options.physics, null, 2))
+      }
+
+      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+
+      // update hover text
+      updateFloatingInfo()
+
+      // updated expanded nodes tags below
+      updateTags()
+
+      // print out final states
+      console.log('finalized visualization', {
+        visDrawing,
+        visNodes: visNodes.get(),
+        visChannels: visChannels.get(),
+        s
+      })
+
+      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+
+      // restart physics if was stopped
+      visDrawing.startSimulation()
+      visDrawing.renderer.allowRedraw = true
+
+      // change order of edges in renderer to determine what's drawn on top of what
+      // visDrawing.body.edgeIndices.sort((a, b) => Math.random() - 0.5)
+      if (!s.removeChannelsOfNonExpanded) {
+        // put channels of expanded nodes later in array, higher index = drawn on top
+        visDrawing.body.edgeIndices.sort((a, b) => +!!s.fromExpanded[a] - +!!s.fromExpanded[b])
+      }
+      if (!s.removeChannelsOfNonExpanded) {
+        // put expanded nodes later in array, , higher index = drawn on top
+        visDrawing.body.nodeIndices.sort((a, b) => +!!s.isExpanded[a] - +!!s.isExpanded[b])
+      }
+
+      // zoom fix a little later
+      setTimeout(async () => {
+        while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+        visDrawing.fit({ animation: { duration: 100 } })
+      }, 1337)
+    }
+
+    // ----------------------------------
+    // --- user input responses below ---
+    // ----------------------------------
+
+    window.toggleRemoveOtherChans.onclick = () => {
+      s.removeChannelsOfNonExpanded = !s.removeChannelsOfNonExpanded
+      finalizeVisualization()
+    }
+
+    window.toggleRemoveOtherNodes.onclick = () => {
+      s.hideNodesWithoutExpandedPeers = !s.hideNodesWithoutExpandedPeers
+      finalizeVisualization()
+    }
+
+    toggleFullScreen.onclick = () => handleToggleFullScreen()
+
+    openConfig.onclick = () => (window.configs.style.display = 'block')
+    closeConfig.onclick = () => (window.configs.style.display = 'none')
+
+    // changes in color mode either through our settings or via browser preference
+    toggleDarkMode.onclick = () => {
+      s.colorScheme = s.colorScheme === 'dark' ? 'light' : 'dark'
+      console.log(`manual color scheme change to ${s.colorScheme} requested`)
+      localStorage.setItem('colorScheme', s.colorScheme)
+      finalizeVisualization() // updates <style> & canvas
+    }
+    // via listener
+    window
+      .matchMedia('(prefers-color-scheme: dark)') // dark mode preference status
+      .addEventListener('change', e => {
+        s.colorScheme = e.matches ? 'dark' : 'light'
+        console.log(`browser color scheme change to ${s.colorScheme} detected`)
+        localStorage.setItem('colorScheme', s.colorScheme)
+        finalizeVisualization() // updates <style> & canvas
+      })
+    const handleColorScheme = () => {
+      if (!s.colorSchemeStyleEl) {
+        const colorSchemeStyleEl = document.createElement('style')
+        s.colorSchemeStyleEl = colorSchemeStyleEl
+        colorSchemeStyleEl.title = 'manual-color-scheme-style'
+        document.head.appendChild(colorSchemeStyleEl) // add to document header
+      }
+
+      const schemeType = s.colorScheme === 'dark' ? 'Dark' : 'Light'
+
+      // prettier-ignore
+      const css = `
+        :root {
+          --colorText: var(--colorText${schemeType}) !important;
+          --colorDebug: var(--colorDebug${schemeType}) !important;
+          --colorData: var(--colorData${schemeType}) !important;
+          --colorBackground: var(--colorBackground${schemeType}) !important;
+          --colorTags: var(--colorTags${schemeType}) !important;
+          --colorTagsDelete: var(--colorTagsDelete${schemeType}) !important;
+          --colorOutlines: var(--colorOutlines${schemeType}) !important;
+          --colorHover: var(--colorHover${schemeType}) !important;
+          --colorActive: var(--colorActive${schemeType}) !important;
+          --visButtonFilter: grayscale(1) contrast(1) invert(${s.colorScheme === 'dark' ? '1' : '0'}) !important;
+        }
+      `
+      s.colorSchemeStyleEl.innerHTML = css
+
+      // if (s.colorSchemeStyleEl) {
+      // s.colorSchemeStyleEl.remove() // deletes our manual dark mode style tag
+      // s.colorSchemeStyleEl = undefined
+      // }
+    }
+
+    const updateTags = () => {
+      // edit quick tags (refactor later)
+      while (expandedTags.firstChild) expandedTags.removeChild(expandedTags.firstChild)
+      expandedTags.append('expanded nodes:')
+      for (const pk in s.isExpanded) {
+        if (!s.isExpanded[pk]) continue // in case false
+        const alias = graph[pk].alias || `${pk.slice(0, 5)}...${pk.slice(-5, 0)}`
+        const expSpanId = `espan${pk.slice(0, 10)}`
+        const expSpan = `<span
+          id="${expSpanId}"
+          class="expTag"
+        >${alias}</span>`
+        expandedTags.insertAdjacentHTML('beforeend', expSpan)
+        const thisSpan = document.getElementById(expSpanId)
+        if (thisSpan)
+          thisSpan.onclick = () => {
+            console.log('clicked', alias, 'tag')
+            handleNodeDoubleClick(pk) // same thing as doubleclicking
+          }
+      }
+
+      // detect enter (submit)
+      expNew.onkeydown = async e => {
+        if (e.key === 'Enter' || e.keyCode === 13 || e.which === 13) {
+          console.log('new node submit/enter detected', expNew.value)
+          const searchString = expNew.value?.toLowerCase()
+          if (!searchString) return false
+          const found = checkGraphFor(searchString)[0]
+          if (!found) return console.log('not found')
+          console.log('using top found result', found.alias, found)
+          const isVisualized = visNodes.get(found.public_key)
+          const isExpanded = s.isExpanded[found.public_key]
+          if (!isVisualized) addGraphNodesToVis([found.public_key])
+          if (!isExpanded) expandNode(found.public_key)
+          if (!isVisualized || !isExpanded) {
+            expNew.value = ''
+            expNew.placeholder = 'add by pubkey or alias'
+            // show detailed info below
+            logReset()
+            log(`summary graph of new node ${found.alias || found.public_key.slice(0, 20)}:`)
+            await logObject(graph[found.public_key])
+            // finalize everything
+            await finalizeVisualization()
+          }
+        }
+      }
+
+      // detect if input from suggestions or other
+      expNew.oninput = e => {
+        // placeholder acts odd
+        if (expNew.value == '') expNew.placeholder = 'add by pubkey or alias'
+        else expNew.placeholder = ''
+
+        // check if suggestion was just used
+        if (e.inputType === 'insertReplacementText' || !e.inputType) {
+          if (expNew.value.length === 66) {
+            expNew.onkeydown({ key: 'Enter' })
+            return true
+          }
+        }
+
+        // otherwise create suggestions
+        const searchString = e?.target?.value?.toLowerCase()
+        if (!searchString || searchString.length < 3) return true
+        const found = checkGraphFor(searchString)
+        if (!found.length) return false
+        bestsuggestions.innerHTML = ''
+        found.forEach(f => {
+          const nChans = graph[f.public_key].channelCount || 0
+          const option = `<option value="${f.public_key}" label="${f.alias} | ${f.public_key} | ${nChans}">`
+          bestsuggestions.insertAdjacentHTML('beforeend', option)
+        })
+      }
+      return true
+    }
+
+    // autocomplete suggestions helper
+    const checkGraphFor = str => {
+      const MAX_N_ITEMS = 5
+      const perfectResults = []
+      const results = []
+      for (const node of nodes) {
+        if (node.public_key === str || node.alias?.toLowerCase() === str) {
+          perfectResults.push(node)
+          // in case someone names alias after another public key keep going
+        }
+      }
+
+      const known = { ...s.isExpanded } // don't list these
+      perfectResults.forEach(n => (known[n.public_key] = true))
+      for (const node of nodes) {
+        if (results.length + perfectResults.length >= MAX_N_ITEMS) break
+        if (known[node.public_key]) continue // ignore known
+        if (node.alias?.toLowerCase().includes(str) || node.public_key.includes(str)) {
+          results.push(node)
+        }
+      }
+
+      // results.sort((a, b) => (a.alias?.length || 0) - (b.alias?.length || 0) || 1 - 2 * (a.alias < b.alias))
+      results.sort((a, b) => graph[b.public_key].channelCount - graph[a.public_key].channelCount)
+      return [...perfectResults, ...results]
+    }
+
+    // write out hovering graph info and add any item sent
+    const updateFloatingInfo = item => {
+      // keep starting part same
+      const countShownChannels = values(s.visibleChannels).filter(v => v).length
+      const countShownNodes = values(s.visibleNodes).filter(v => v).length
+      const countDirectChannels = values(s.fromExpanded).length
+      const countIndirectChannels = countShownChannels - countDirectChannels
+      const triangleFactor = ((countIndirectChannels / countDirectChannels) * 100)?.toFixed(0)
+      const statsDirectIndirect =
+        countDirectChannels && !s.removeChannelsOfNonExpanded
+          ? `(${countDirectChannels} direct, ${countIndirectChannels} indirect, ${triangleFactor}%)`
+          : ''
+      const otherNodes = s.hideNodesWithoutExpandedPeers ? 'only common peers' : 'all peers'
+      const otherChannels = s.removeChannelsOfNonExpanded ? 'only direct channels' : 'incl. indirect channels'
+      outputDrawingInfo.innerHTML =
+        [
+          `${values(s.isExpanded).filter(n => n).length} nodes peers expanded (double-click nodes to toggle)`,
+          `visibility settings: ${otherNodes}, ${otherChannels}`,
+          `shown channels: ${countShownChannels}/${channels.length} ${statsDirectIndirect}`,
+          `shown nodes:    ${countShownNodes}/${nodes.length}`
+        ].join('\n') + '\n'
+
+      if (item) outputDrawingInfo.append(item.replace(/[{}<>[\]",]/g, ''))
+    }
+
+    // get node info from pubkey
+    const getNodeSummary = id => {
+      const pubkey = id // e.nodes?.[0]
+      const selNode = graph[pubkey]
+      const {
+        alias,
+        public_key,
+        sockets,
+        updated_at,
+        channelCount,
+        htlc_max_mtokens_out,
+        htlc_max_mtokens_in
+      } = selNode
+
+      // total msats out too big of number, convert units to whole coin
+      const maxBtcOut = (htlc_max_mtokens_out * 1e-3 * 1e-8).toFixed(3)
+      const maxBtcIn = (htlc_max_mtokens_in * 1e-3 * 1e-8).toFixed(3)
+
+      return [
+        [`alias:`, `${alias}`],
+        [`public key:`, `${pubkey}`],
+        ['channels:', `${channelCount}`],
+        ['max htlcs out /BTC:', `${maxBtcOut}`],
+        ['max htlcs in /BTC:', `${maxBtcIn}`]
+        // TODO add feature bits comma separated list
+      ]
+        .map(line => [line[0].padStart(19), line[1]].join('   '))
+        .join('\n')
+    }
+
+    // get edge info from edgeId
+    const getEdgeSummary = id => {
+      const edgeId = id // e.edge || e.edges?.[0]
+
+      const [pk1, pk2] = edgeId.split(',')
+      // const visEdge = visChannels.get(edgeId)
+
+      // const { from, to } = visEdge
+      const chs = graph[pk1].channels[pk2]
+      // let { id, local, remote } = selChans[0] // 1 only for now
+      const alias1 = (graph[pk1].alias || pk1.slice(0, 20)).padStart(20)
+      const alias2 = graph[pk2].alias || pk2.slice(0, 20) //.padEnd(20)
+
+      const rate1 = chs[0].local.fee_rate?.toFixed(0).padStart(16)
+      const rate2 = chs[0].remote.fee_rate?.toFixed(0) //.padEnd(16)
+      const mbase1 = chs[0].local.base_fee_mtokens.padStart(16)
+      const mbase2 = chs[0].remote.base_fee_mtokens //.padEnd(16)
+
+      // prettier-ignore
+      const info = [
+        `                 ${alias1}   ${alias2}`,
+        `         rate /ppm:  ${rate1}   ${rate2}`,
+        `       base /msats:  ${mbase1}   ${mbase2}`,
+        ...chs.map(c => [
+          `\n ${c.id.padStart(17)}:          ${c.local.is_disabled ? 'disabled' : '        '}   ${c.remote.is_disabled ? 'disabled' : '        '}`,
+          `    max htlc /sats:  ${pretty(c.local.max_htlc_mtokens * 1e-3).padStart(16)}   ${pretty(c.remote.max_htlc_mtokens * 1e-3)} `,
+          `cltv_delta /blocks:              ${c.local.cltv_delta.toFixed(0).padStart(4)}   ${c.remote.cltv_delta}`,
+          `                     ${c.local.updated_at.replace(/[ZT]/g, ' ').slice(0, -8)}   ${c.remote.updated_at.replace(/[ZT]/g, ' ').slice(0, -8)}`,
+        ].join('\n')
+        ),
+
+      ]
+      const infoText = info.join('\n') //.replace(/[{}<>[\]",]/g, '')
+      return infoText
+    }
+
+    // click
+    visDrawing.on('selectNode', e => {
+      console.log('clicked on node', visNodes.get(e.nodes))
+    })
+
+    // click
+    visDrawing.on('selectEdge', e => {
+      console.log('clicked on edge', visChannels.get(e.edges))
+    })
+
+    // flickering hover actions while dragging are annoying
+    visDrawing.on('dragStart', e => {
+      visDrawing.setOptions({ interaction: { hover: false } })
+      visRemoveHighlights()
+    })
+    visDrawing.on('dragEnd', e => {
+      visDrawing.setOptions({ interaction: { hover: true } })
+    })
+
+    // hover over nodes
+    visDrawing.on('hoverNode', e => {
+      // console.log('hoverNode', e)
+      if (e.event.buttons === 0) {
+        visDrawing.stopSimulation()
+        // getNodeSummary(e.node)
+      } else visDrawing.startSimulation()
+    })
+
+    // hover over channels
+    visDrawing.on('hoverEdge', e => {
+      // console.log('hoverEdge', e)
+      // visDrawing.stopSimulation()
+    })
+
+    // when hover ends
+    visDrawing.on('blurEdge', e => {
+      // console.log('blurEdge')
+      visDrawing.startSimulation()
+      visDrawing.unselectAll()
+    })
+    visDrawing.on('blurNode', e => {
+      // console.log('blurNode')
+      visDrawing.startSimulation()
+      visDrawing.unselectAll()
+    })
+    outputDrawing.onmouseout = e => {
+      // console.log('mouseout', e)
+      visDrawing.startSimulation() // resume physics
+      visDrawing.unselectAll() // remove selected
+      visRemoveHighlights() // remove hover highlights
+      const visTooltip = document.getElementsByClassName('vis-tooltip')[0]
+      if (visTooltip) visTooltip.style.visibility = 'hidden' // hide tooltip
+    }
+    const visRemoveHighlights = () => {
+      // remove hover highlights
+      const selh = visDrawing.selectionHandler
+      for (const edgeId in selh.hoverObj.edges) {
+        selh.hoverObj.edges[edgeId].hover = false
+        delete selh.hoverObj.edges[edgeId]
+      }
+      selh.body.emitter.emit('_requestRedraw')
+    }
+
+    // right click (future menus)
+    // visDrawing.on('oncontext', p => {
+    // console.log('right clicked')
+    // p.event.preventDefault() // block default menu
+    // handleToggleFullScreen() // toggle full screen
+    // })
+
+    let handleResizeFitTimeout
+    visDrawing.on('resize', () => {
+      clearTimeout(handleResizeFitTimeout)
+      handleResizeFitTimeout = setTimeout(async () => {
+        while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+        console.log('resize done detected, refitting graph')
+        s.isVisible && visDrawing.fit({ animation: { duration: 100 } })
+      }, 500)
+    })
+
+    // listen for changes in fullscreen status (bc many ways to exit fs)
+    const handleFullScreenStyles = () => {
+      const fsDrawingCSS = {
+        padding: '0',
+        margin: '0',
+        height: '100%',
+        width: '100%',
+        resize: 'none'
+      }
+      if (isFullScreen()) for (const name in fsDrawingCSS) outputDrawing.style[name] = fsDrawingCSS[name]
+      else for (const name in fsDrawingCSS) outputDrawing.style[name] = ''
+      console.log('change in full screen status detected')
+    }
+    ;['webkitfullscreenchange', 'mozfullscreenchange', 'fullscreenchange', 'MSFullscreenChange'].forEach(eName => {
+      document.addEventListener(eName, handleFullScreenStyles)
+    })
+    const isFullScreen = () =>
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement
+    const handleToggleFullScreen = () => {
+      const fsEl = window.outputDrawingWrapper
+      if (isFullScreen()) {
+        if (document.exitFullscreen) document.exitFullscreen()
+        else if (document.mozCancelFullScreen) document.mozCancelFullScreen()
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen()
+        else if (document.msExitFullscreen) document.msExitFullscreen()
+      } else {
+        if (fsEl.requestFullscreen) fsEl.requestFullscreen()
+        else if (el.mozRequestFullScreen) fsEl.mozRequestFullScreen()
+        else if (el.webkitRequestFullscreen) fsEl.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT)
+        else if (el.msRequestFullscreen) fsEl.msRequestFullscreen()
+      }
+      handleFullScreenStyles()
+      closeConfig.onclick()
+    }
+
+    // click for changes in doubleclicks / expansions / collapses
+    const handleEdgeDoubleClick = async edgeId => {
+      const visEdge = visChannels.get(edgeId)
+      const { from, to } = visEdge
+      const fromAlias = graph[from].alias || from.slice(0, 20)
+      const toAlias = graph[to].alias || to.slice(0, 20)
+      const selChans = graph[from].channels[to]
+
+      logReset() // clear log
+      log(`summary of ${selChans.length} channels ${fromAlias}-${toAlias}:`)
+      for (const selChan of selChans) {
+        logObject(
+          {
+            id: selChan.id,
+            [fromAlias]: selChan.local,
+            [toAlias]: selChan.remote
+          },
+          4
+        )
+      }
+    }
+
+    const showJsonViewerGraphOf = async selectedPubKey => {
+      const selNode = graph[selectedPubKey]
+      logReset() // clear detailed info
+      log(`summary of graph for node ${selNode.alias || selectedPubKey.slice(0, 20)}:`)
+      await logObject(selNode, 2)
+    }
+
+    const handleNodeDoubleClick = async selectedPubKey => {
+      // toggle expanded status
+      if (!s.isExpanded[selectedPubKey]) expandNode(selectedPubKey)
+      else unexpandNode(selectedPubKey)
+
+      // write out detailed info below
+      await showJsonViewerGraphOf(selectedPubKey)
+
+      finalizeVisualization()
+    }
+
+    visDrawing.on('doubleClick', async p => {
+      const selectedPubKey = p?.nodes?.[0]
+      const selectedEdge = p?.edges?.[0]
+      console.log('double-clicked', selectedPubKey || selectedEdge || 'nothing')
+      if (!selectedPubKey && !selectedEdge) return null
+      if (!selectedPubKey && selectedEdge) {
+        handleEdgeDoubleClick(selectedEdge)
+        return null
+      }
+      handleNodeDoubleClick(selectedPubKey)
+    })
+
+    // arbitrary clicks
+    document.onclick = e => {
+      // clicks outside of settings/config or openConfig button -> close settings/config menu
+      if (
+        !window.configs.contains(e.target) && // click not in config menu
+        !window.openConfig.contains(e.target) && // nor open config button
+        !document.getElementsByClassName('vis-color-picker')?.[0]?.contains(e.target) // nor color picker
+      ) {
+        if (window.configs.style.display !== 'none') window.configs.style.display = 'none'
+      }
+    }
+
+    // show hidden buttons/inputs
+    openConfig.style.display = 'block'
+    expNew.style.display = 'block'
+
+    // figure out which node graph to print below
+    if (!areStartingNodesProvided) {
+      // show examples of what's possible if no ?node=pubkey in url
+      log('\nexample summary of a small node w/ couple of channels:')
+      const egPubKey = '03c7b849b67f8c5fdbc3bc2d140bf45924d7492a687ede91d3dd67570f50b62abe'
+      const egNode = graph[egPubKey]
+      await logObject(egNode, 2)
+
+      log('\nexample of a raw channel graph data:')
+      await logObject(channels[33333], 3)
+
+      log('\nexample of a raw node graph data:')
+      await logObject(nodes[1], 0)
+    } else {
+      // whatever is 1st node will be shown in detail below
+      showJsonViewerGraphOf(startingNodes[0])
+    }
+
+    // wait until browser tab visible
+    while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+
+    // set up scene with starting nodes chosen
+    addGraphNodesToVis(startingNodes)
+    expandNode(startingNodes)
+    finalizeVisualization()
+  }
+
+  // index graph by pubkeys
+  const summarizeGraph = ({ nodes, channels }) => {
+    // starting with channels graph
+    const res = channels.reduce((graph, channel) => {
+      const { id, updated_at } = channel
+      const policy1 = channel.policies[0]
+      const policy2 = channel.policies[1]
+      if (!policy1.public_key || !policy2.public_key || isNaN(policy1.fee_rate) || isNaN(policy2.fee_rate)) return graph
+
+      // when this node1 or node2 hasn't been added yet
+      // set initial values
+      if (!graph[policy1.public_key])
+        graph[policy1.public_key] = {
+          public_key: policy1.public_key,
+          channels: {},
+          htlc_max_mtokens_out: 0,
+          htlc_max_mtokens_in: 0
+        }
+      if (!graph[policy2.public_key])
+        graph[policy2.public_key] = {
+          public_key: policy2.public_key,
+          channels: {},
+          htlc_max_mtokens_out: 0,
+          htlc_max_mtokens_in: 0
+        }
+      const node1 = graph[policy1.public_key]
+      const node2 = graph[policy2.public_key]
+
+      // pick what parts of channel gossip to include in node.channels summary
+      node1.channels[policy2.public_key] = [
+        {
+          id,
+          updated_at,
+          public_key: policy2.public_key,
+          local: policy1,
+          remote: policy2
+        },
+        ...(node1.channels[policy2.public_key] || [])
+      ]
+      node2.channels[policy1.public_key] = [
+        {
+          id,
+          updated_at,
+          public_key: policy1.public_key,
+          local: policy2,
+          remote: policy1
+        },
+        ...(node2.channels[policy1.public_key] || [])
+      ]
+
+      // neutrino node doesn't have capacity but we do have max_htlc
+      // those are default (capacity - reserves)
+      // or some users change to reflect actual available liquidity
+      node1.htlc_max_mtokens_out += +policy1.max_htlc_mtokens || 0 // max htlc out
+      node1.htlc_max_mtokens_in += +policy2.max_htlc_mtokens || 0 // max htlc in
+
+      node2.htlc_max_mtokens_out += +policy2.max_htlc_mtokens || 0 // max htlc out
+      node2.htlc_max_mtokens_in += +policy1.max_htlc_mtokens || 0 // max htlc in
+
+      return graph
+    }, {})
+
+    for (const node of nodes) {
+      // if no channels, has to be initialized here
+      res[node.public_key] ??= {
+        public_key: node.public_key,
+        channels: {},
+        htlc_max_mtokens_out: 0,
+        htlc_max_mtokens_in: 0
+      }
+      const resNode = res[node.public_key]
+
+      // pick what parts of node graph to include in summary
+      resNode.alias = node.alias
+      resNode.color = node.color
+      resNode.sockets = node.sockets
+      // https://github.com/lightningnetwork/lnd/blob/master/lnwire/features.go
+      resNode.features = node.features.reduce((all, one) => ((all[one.bit] = one), all), {})
+      resNode.updated_at = node.updated_at
+      resNode.channelCount = keys(resNode.channels).length // speeds up calc later
+    }
+
+    return res
+  }
+
+  const ts = () =>
+    new Date()
+      .toISOString()
+      .replace('T', ' ')
+      .replace('Z', '')
+      .slice(0, -4)
+
+  const log = (...args) => {
+    outputText.append(args.join(' ') + '\n')
+    console.log(args.join(' '))
+  }
+  const logReset = () => {
+    while (outputText.firstChild) outputText.removeChild(window.outputText.firstChild)
+    outputText.innerHTML = ''
+  }
+  const logD = (...args) => {
+    const timeStamp = ts()
+    debugText.insertAdjacentHTML('afterbegin', `${timeStamp} ${args.join(' ')}\n`)
+    console.log(args.join(' '))
+  }
+  const logObject = async (obj, n = 2) => {
+    const numChannels = obj.channels ? keys(obj.channels).length : 1
+    const breakLimit = ceil(max(numChannels / 10, 10))
+    const viewer = await BigJsonViewerDom.fromObject(obj, {
+      objectNodesLimit: breakLimit,
+      arrayNodesLimit: breakLimit
+    })
+    const el = viewer.getRootElement()
+    el.openAll(n)
+    outputText.append(el)
+    console.log(obj)
+  }
+
+  // get ipns address and return array of cid strings it resolves to
+  const getFromIPNS = async address => {
+    if (!address.includes('ipns')) address = '/ipns/' + address
+    logD(`IPFS: attempting to resolve ${address} ...`)
+
+    try {
+      const cids = []
+      // const nocache = false // block use of cached results?
+
+      const name = await doUntilWorks(async () => await ipfsNode.resolve(address))
+
+      logD(`IPNS address ${address} resolved to ${name}`)
+      cids.push(name.replace('/ipfs/', '')) // just need cid hash
+
+      /*
+      for await (const name of ipfsNode.name.resolve(address)) {
+        // remove /ipfs/ characters from cid string so can use directly in .ls() & .cat()
+        cids.push(name.replace('/ipfs/', ''))
+        logD(`IPNS address ${address} resolved to IPFS cid of ${name}`)
+      }
+      */
+      return cids
+    } catch (e) {
+      console.log('getFromIPNS error:', e)
+    }
+  }
+
+  // get array of string cids and return array of objects retrieved
+  const getFromIPFS = async cids => {
+    const res = []
+    for (const cid of cids) {
+      try {
+        logD(`IPFS cid ${cid}: <span id="${cid}">...</span>`)
+        const { size } = (await ipfsNode.ls(cid).next()).value
+        const sizeMB = (size / 1024 / 1024).toFixed(1)
+        const stream = ipfsNode.cat(cid)
+        const dataPieces = []
+        window[cid].innerHTML = `loaded 0.0 / ${sizeMB} MB`
+        for await (const chunk of stream) {
+          const bytesSoFar = dataPieces.length
+          const bytes = chunk.length
+          for (let i = 0; i < bytes; i++) dataPieces[bytesSoFar + i] = chunk[i]
+          const totalMB = (dataPieces.length / 1024 / 1024).toFixed(1)
+          window[cid].innerHTML = `loaded ${totalMB} / ${sizeMB} MB`
+        }
+        const data = new Uint8Array(dataPieces)
+        // console.log(`pinned ${cid}`, await ipfsNode.add(data)) // pin data for others
+        window[cid].innerHTML = `loaded ${(data.length / 1024 / 1024).toFixed(1)} / ${sizeMB} MB`
+        const decompressedData = pako.inflate(data, { to: 'string' })
+        logD(`IPFS cid ${cid}: decompressed to ${(decompressedData.length / 1024 / 1024).toFixed(1)} MB`)
+        const list = JSON.parse(decompressedData)
+        res.push(list)
+      } catch (e) {
+        logD('IPFS error', e)
+        console.error(e)
+        await new Promise(res => setTimeout(res, 21 * 1000))
+        return await getFromIPFS(cids)
+      }
+    }
+    return res
+  }
+
+  // set up visualization, empty at start
+  const visNodes = new vis.DataSet([])
+  const visChannels = new vis.DataSet([])
+  const complexScenePhysics = {
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: {
+      theta: 0.96,
+      damping: 4.2,
+      springConstant: 0.21,
+      centralGravity: 0.001,
+      springLength: 400
+    }
+  }
+  const smallSetPhysics = {
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: {
+      theta: 0.21,
+      damping: 3.1415,
+      springConstant: 0.021,
+      centralGravity: 0.001,
+      springLength: 200
+    }
+  }
+  const defaultPhysics = {
+    solver: 'forceAtlas2Based',
+    forceAtlas2Based: {
+      theta: 0.5, // overwritten based on scene
+      damping: 0.5, // overwritten based on scene
+      springConstant: 0.06,
+      springLength: 400,
+      centralGravity: 0.005
+    }
+  }
+  const visOptions = {
+    nodes: {
+      shape: 'dot',
+      size: 8,
+      shapeProperties: { interpolation: false },
+      font: { face: 'monospace' },
+      borderWidth: 1.5,
+      borderWidthSelected: 1.5
+      // chosen: false,
+      // color: {
+      //   highlight: { border: '#333333' },
+      //   hover: { border: '#333333' }
+      // }
+    },
+    edges: {
+      width: 1,
+      selectionWidth: 3, // added to width on selection
+      hoverWidth: 3 // added to width on hover
+      // color: {
+      //   opacity: 0.21 * 2
+      // }
+      // length: 200
+    },
+    configure: {
+      enabled: true,
+      container: window.configScrollWrapper
+    },
+    layout: {
+      clusterThreshold: 1000
+    },
+    physics: {
+      ...defaultPhysics,
+      adaptiveTimestep: true,
+      // solver: 'barnesHut',
+      // forceAtlas2Based: {
+      // damping: 0.6 // >1 works too
+      // springConstant: 0.042
+      //   avoidOverlap: 0.21,
+      //   springLength: 200
+      // },
+      // barnesHut: {
+      // damping: 0.9,
+      // avoidOverlap: 0.99,
+      // springLength: 100,
+      // springConstant: 0.00021,
+      // },
+      // repulsion: {
+      //   nodeDistance: 200,
+      //   springLength: 200
+      // },
+      // maxVelocity: 21
+      // minVelocity: 1,
+      stabilization: { enabled: false }
+      // stabilization: {
+      //   enabled: true,
+      //   iterations: 21
+      // }
+    },
+    interaction: {
+      selectable: true,
+      selectConnectedEdges: false, // different from hoverConnectedEdges
+      hoverConnectedEdges: true,
+      hover: true,
+      navigationButtons: true
+    }
+  }
+
+  const hexToHsl = hex => {
+    const r = ('0x' + hex[1] + hex[2]) / 255
+    const g = ('0x' + hex[3] + hex[4]) / 255
+    const b = ('0x' + hex[5] + hex[6]) / 255
+    const [maxV, minV] = [max(r, g, b), min(r, g, b)]
+    let [h, s, l] = [0, 0, (maxV + minV) / 2]
+    const d = maxV - minV
+    if (maxV !== minV) {
+      s = l > 0.5 ? d / (2 - maxV - minV) : d / (maxV + minV)
+      if (maxV === r) h = (g - b) / d + (g < b ? 6 : 0)
+      else if (maxV === g) h = (b - r) / d + 2
+      else h = (r - g) / d + 4
+      h /= 6
+    }
+    return { h, s, l }
+  }
+  const hslToHex = ({ h, s, l }) => {
+    const a = s * min(l, 1 - l)
+    const f = n => {
+      const k = (n + h * 12) % 12
+      const c = l - a * max(min(k - 3, 9 - k, 1), -1)
+      return round(255 * c)
+        .toString(16)
+        .padStart(2, '0')
+    }
+    return `#${f(0)}${f(8)}${f(4)}`
+  }
+
+  const doUntilWorks = async (task, time = 5 * 1000) => {
+    let tries = 1
+    let success = false
+    let res
+    while (!success) {
+      try {
+        res = await task()
+        success = true
+      } catch (e) {
+        console.log('task failed, attempt', tries, ', error:', e.code || e)
+        console.log('retrying in', (time / 1000).toFixed(0), 'seconds')
+        await new Promise(res => setTimeout(res, time))
+      }
+      tries++
+    }
+    return res
+  }
+
+  const clrCheck = (hex = '#888888') => {
+    let { h, s, l } = hexToHsl(hex)
+    // not to blend in with white background
+    // hsl(0,0,0.9 or 90%) is #e6e6e6 as brighest
+    if (l > 0.9) l = 0.9
+    // not to blend in with black background
+    // hsl(0,0,0.1 or 10%) is #1a1a1a as darkest
+    if (l < 0.1) l = 0.1
+    return hslToHex({ h, s, l })
+  }
+  const avgHex = (hex1 = '#888888', hex2 = '#888888', fraction1 = 0.5) => {
+    const fraction2 = 1 - fraction1
+    const r = fraction1 * `0x${hex1[1]}${hex1[2]}` + fraction2 * `0x${hex2[1]}${hex2[2]}`
+    const g = fraction1 * `0x${hex1[3]}${hex1[4]}` + fraction2 * `0x${hex2[3]}${hex2[4]}`
+    const b = fraction1 * `0x${hex1[5]}${hex1[6]}` + fraction2 * `0x${hex2[5]}${hex2[6]}`
+
+    const rh = round(r)
+      .toString(16)
+      .padStart(2, '0')
+    const gh = round(g)
+      .toString(16)
+      .padStart(2, '0')
+    const bh = round(b)
+      .toString(16)
+      .padStart(2, '0')
+
+    return clrCheck(`#${rh}${gh}${bh}`)
+  }
+  const pretty = n => String(trunc(+n || 0)).replace(/\B(?=(\d{3})+\b)/g, ' ')
+
+  const cleanIndexedDB = () => {
+    const promises = []
+    for (const db of ['ipfs', 'ipfs/blocks', 'ipfs/datastore', 'ipfs/keys', 'ipfs/pins']) {
+      promises.push(
+        new Promise((res, rej) => {
+          const req = window.indexedDB?.deleteDatabase(db)
+          req.onsuccess = () => {
+            console.log(db, 'database deleted')
+            res()
+          }
+          req.onerror = () => {
+            console.log(db, 'database deletion error')
+            rej()
+          }
+        })
+      )
+    }
+    return Promise.allSettled(promises)
+  }
+
+  logD('IPFS data is stored in indexedDB in browsers and is re-used on refresh w/o need to re-download')
+
+  run()
+
+  // references
+  // https://github.com/ipfs/js-ipfs/blob/master/docs/CONFIG.md
+  // https://github.com/ipfs/js-ipfs/tree/master/docs/core-api
+  // https://github.com/ipfs/js-ipfs/blob/master/docs/MODULE.md
+  // https://github.com/ipfs/kubo/blob/master/docs/config.md
+  // https://github.com/ipfs/kubo/blob/master/docs/experimental-features.md#ipfs-pubsub
+
+  // limit number of connections
+  // https://github.com/ipfs/kubo/blob/master/docs/config.md#swarmconnmgr
+  // https://github.com/ipfs/js-ipfs/blob/master/docs/CONFIG.md#connmgr
+  // await ipfsNode.config.set('Swarm.ConnMgr', { LowWater: 3, HighWater: 6 })
+  // await ipfsNode.config.get('Swarm.ConnMgr') or .getAll() to check
+  // await ipfsNode.config.profiles.list() // returns array of prebuilt profiles
+  // await ipfsNode.config.profiles.apply("lowpower") // returns { original, updated }
+
+  // https://github.com/ipfs/js-ipfs/blob/master/docs/core-api/PIN.md#ipfspinlsoptions
+  // list pinned items
+  /*
+  (async () => {
+    for await (const pin of ipfsNode.pin.ls({ type: 'recursive' })) {
+      console.log('still pinning', pin.cid.toString(), pin.type)
+    }
+  })()
+  */
+  // cid.toV0().toString() // original
+  // cid.toV1().toString() // base 32
+
+  // default browser config
+  // https://github.com/ipfs/js-ipfs/blob/master/packages/ipfs-core-config/src/config.browser.js
+
+  // ipfsNode.stats.bitswap() has { peers , wantlist, dataSent, dataReceived, dupDataReceived, provideBufLen }
+</script>
