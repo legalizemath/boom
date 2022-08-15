@@ -206,6 +206,17 @@
       removeChannelsOfNonExpanded: true
     })
 
+    // load up the visjs network drawing when tab visible
+    while (document.visibilityState === 'hidden') await new Promise(res => setTimeout(res, 1000))
+    const visDrawing = new vis.Network(
+      window.outputDrawing,
+      {
+        nodes: visNodes,
+        edges: visChannels
+      },
+      visOptions
+    )
+
     // infinite issues come up when loading while in hidden tab so listen for it
     // https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API
     document.addEventListener(
@@ -224,17 +235,6 @@
         }
       },
       false
-    )
-
-    // load up the visjs network drawing when tab visible
-    while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
-    const visDrawing = new vis.Network(
-      window.outputDrawing,
-      {
-        nodes: visNodes,
-        edges: visChannels
-      },
-      visOptions
     )
 
     // take array of pubkeys and add nodes from graph to vis
