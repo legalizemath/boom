@@ -1,0 +1,376 @@
+:root {
+  /* light scheme */
+  --colorTextLight: #111111;
+  --colorDebugLight: #d0000d;
+  --colorDataLight: #184183;
+  --colorBackgroundLight: #fefefe;
+  --colorTagsLight: #e0eaff;
+  --colorTagsDeleteLight: #dac1c1;
+  --colorOutlinesLight: #dddddd;
+  --colorHoverLight: #eeeeee;
+  --colorActiveLight: #aaaaaa;
+
+  /* dark scheme */
+  --colorTextDark: #eeeeee;
+  --colorDebugDark: #b3333f;
+  --colorDataDark: #184183;
+  --colorBackgroundDark: #111111;
+  --colorTagsDark: #555576;
+  --colorTagsDeleteDark: #d0000d;
+  --colorOutlinesDark: #333333;
+  --colorHoverDark: #222222;
+  --colorActiveDark: #333333;
+
+  /* pick default */
+  /*
+  --colorText: var(--colorTextLight);
+  --colorDebug: var(--colorDebugLight);
+  --colorData: var(--colorDataLight);
+  --colorBackground: var(--colorBackgroundLight);
+  --colorTags: var(--colorTagsLight);
+  --colorTagsDelete: var(--colorTagsDeleteLight);
+  --colorOutlines: var(--colorOutlinesLight);
+  --colorHover: var(--colorHoverLight);
+  --colorActive: var(--colorActiveLight);
+  */
+
+  --colorText: var(--colorTextDark);
+  --colorDebug: var(--colorDebugDark);
+  --colorData: var(--colorDataDark);
+  --colorBackground: var(--colorBackgroundDark);
+  --colorTags: var(--colorTagsDark);
+  --colorTagsDelete: var(--colorTagsDeleteDark);
+  --colorOutlines: var(--colorOutlinesDark);
+  --colorHover: var(--colorHoverDark);
+  --colorActive: var(--colorActiveDark);
+  --visButtonFilter: grayscale(1) contrast(1) invert(1);
+
+  color-scheme: light dark;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--colorText);
+}
+
+/* @media (not (prefers-color-scheme: dark)) {
+  :root {
+    --colorText: var(--colorTextLight);
+    --colorDebug: var(--colorDebugLight);
+    --colorData: var(--colorDataLight);
+    --colorBackground: var(--colorBackgroundLight);
+    --colorTags: var(--colorTagsLight);
+    --colorTagsDelete: var(--colorTagsDeleteLight);
+    --colorOutlines: var(--colorOutlinesLight);
+    --colorHover: var(--colorHoverLight);
+    --colorActive: var(--colorActiveLight);
+    --visButtonFilter: grayscale(1) contrast(1) invert(0);
+  }
+} */
+
+/* to handle at first loading time */
+/* @media (prefers-color-scheme: dark) {
+  :root {
+    --colorText: var(--colorTextDark);
+    --colorDebug: var(--colorDebugDark);
+    --colorData: var(--colorDataDark);
+    --colorBackground: var(--colorBackgroundDark);
+    --colorTags: var(--colorTagsDark);
+    --colorTagsDelete: var(--colorTagsDeleteDark);
+    --colorOutlines: var(--colorOutlinesDark);
+    --colorHover: var(--colorHoverDark);
+    --colorActive: var(--colorActiveDark);
+    --visButtonFilter: grayscale(1) contrast(1) invert(1);
+  }
+} */
+
+
+* {
+  box-sizing: border-box;
+  /* outline: 1px solid #ff000088 !important; */
+  padding: 0;
+  margin: 0;
+  box-shadow: unset !important;
+}
+
+body {
+  background-color: var(--colorBackground);
+}
+#outputDrawingWrapper {
+  margin: 0;
+  padding: 0;
+  /* margin-top: 6px; */
+  /* margin-left: 6px; */
+  /* width: calc(100% - 12px); */
+  width: 100%;
+  height: 80vh;
+  resize: vertical;
+  overflow: hidden;
+  border-bottom: 1px solid var(--colorOutlines);
+  background-color: var(--colorBackground);
+}
+#outputText,
+#debugText,
+#outputDrawingInfo {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+#outputText {
+  padding: 12px;
+}
+#debugText {
+  padding: 12px;
+  color: var(--colorDebug);
+}
+#outputDrawing {
+  width: 100%;
+  height: 100%;
+}
+#outputDrawingInfo {
+  position: absolute;
+  left: 12px;
+  top: 6px;
+  padding: 6px;
+  margin: 6px;
+  opacity: 0.5;
+  background-color: var(--colorBackground);
+  pointer-events: none;
+  user-select: none;
+  line-height: 14px;
+}
+#expandedTags {
+  padding: 12px;
+  padding-bottom: 0;
+  user-select: none;
+}
+.expTag {
+  padding: 3px 12px;
+  border-radius: 4px;
+  background-color: var(--colorTags);
+  margin: 4px;
+  line-height: 2;
+}
+.expTag:hover {
+  cursor: pointer;
+  background-color: var(--colorTagsDelete);
+}
+#expNew {
+  display: none;
+  padding: 3px 12px;
+  margin-left: 12px;
+  margin-right: 12px;
+  margin-top: 6px;
+  width: calc(100% - 24px);
+  box-sizing: border-box;
+  border: none;
+  border-bottom: 1px solid var(--colorActive);
+  background-color: var(--colorBackground);
+  color: var(--colorText);
+}
+#expNew::placeholder {
+  color: var(--colorActive);
+  opacity: 1;
+}
+input:focus {
+  outline: none;
+}
+#configs {
+  display: none;
+  background-color: var(--colorBackground);
+  padding: 6px;
+  position: fixed;
+  right: 6px;
+  top: 6px;
+  max-width: calc(100% - 24px);
+  width: 450px;
+  min-width: 450px;
+  height: 65vh;
+  resize: both;
+  overflow: hidden;
+  border: 1px solid var(--colorOutlines);
+  direction: rtl;
+  z-index: 10;
+}
+#closeConfig,
+#openConfig,
+.toggle {
+  text-align: center;
+  user-select: none;
+  padding: 6px 12px;
+  margin: 6px;
+  cursor: pointer;
+}
+#openConfig {
+  display: none;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  opacity: 0.33;
+}
+#closeConfig:hover,
+#openConfig:hover,
+.toggle:hover {
+  background-color: var(--colorHover);
+  opacity: 1;
+}
+#closeConfig:active,
+#openConfig:active,
+.toggle:active {
+  background-color: var(--colorActive);
+}
+#configScrollWrapper {
+  width: 100%;
+  height: calc(100% - 40px);
+  padding: 12px;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  direction: ltr;
+}
+
+/* internal vis */
+
+.vis-left,
+.vis-right,
+.vis-down,
+.vis-up {
+  display: none !important;
+}
+/* .vis-button, */
+.vis-zoomIn,
+.vis-zoomOut,
+.vis-zoomExtends
+ {
+  /* has to be bright background*/
+  background-color: var(--colorBackgroundLight);
+  filter: grayscale(1) contrast(1);
+  filter: var(--visButtonFilter);
+  /* background-blend-mode: hard-light; */
+  opacity: 0.15;
+}
+.vis-button:hover {
+  box-shadow: none !important;
+  opacity: 0.75;
+}
+.vis-configuration-wrapper {
+  width: 100% !important;
+}
+.vis-configuration-wrapper * {
+  float: unset !important;
+  margin: 1px;
+}
+.vis-config-item {
+  height: auto !important;
+  width: auto !important;
+  right: 0 !important;
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: right;
+  border-radius: unset !important;
+}
+.vis-config-item:not(.vis-config-s0) {
+  background-color: #8882 !important;
+}
+.vis-config-label,
+.vis-config-header {
+  width: 140px !important;
+  margin-right: auto;
+  user-select: none;
+}
+.vis-config-s2 {
+  left: 0 !important;
+  margin-left: 10px;
+}
+.vis-config-s3 {
+  left: 0 !important;
+  margin-left: 20px;
+}
+.vis-config-s4 {
+  left: 0 !important;
+  margin-left: 30px;
+}
+.vis-config-range {
+  transform: scale(0.95);
+  flex-basis: 300px;
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+.vis-config-rangeinput {
+  width: 45px !important;
+  background-color: transparent;
+  border: none;
+  color: var(--colorText);
+}
+.vis-config-colorBlock,
+.vis-config-rangeinput,
+.vis-config-select {
+  margin: 1px !important;
+  margin-right: 3px !important;
+  top: unset !important;
+}
+.vis-color-picker {
+  background-color: var(--colorBackground) !important;
+  position: fixed !important;
+  left: 50vw !important;
+  top: 50vh !important;
+  margin: 1px !important;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--colorOutlines);
+}
+.vis-color-picker .vis-button {
+  color: var(--colorText) !important;
+  background-color: unset !important;
+  border: none !important;
+}
+.vis-color-picker .vis-arrow {
+  display: none;
+}
+.vis-config-option-container,
+.vis-config-button,
+.vis-config-option-container pre {
+  width: auto !important;
+  left: unset !important;
+  background-color: var(--colorBackground) !important;
+  left: 0 !important;
+}
+.vis-config-button.hover {
+  color: var(--colorText) !important;
+}
+.vis-tooltip {
+	/* background-color: var(--colorBackground) !important; */
+  background-color: unset !important;
+	padding: 6px 12px !important;
+	/* opacity: 0.85 !important; */
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  font-family: monospace !important;
+  font-size: 12px !important;
+  border: 1px solid var(--colorOutlines) !important;
+  color: var(--colorText) !important;
+  backdrop-filter: blur(10px) !important;
+}
+.vis-config-checkbox {
+  margin-right: 3px;
+}
+.vis-config-button {
+  background-color: unset !important;
+}
+input.vis-configuration.vis-config-range::-webkit-slider-runnable-track,
+input.vis-configuration.vis-config-range::-moz-range-track {
+  box-shadow: none !important;
+  height: 3px !important;
+}
+
+/* json-viewer, fix for firefox that still works with chrome */
+
+.json-node-accessor {
+  height: 0.8em !important;
+  display: inline-block !important;
+  line-height: 0.8em !important;
+}
+.json-node-label {
+  color: var(--colorData) !important;
+}
+.json-node-link:hover {
+  color: var(--colorText) !important;
+}
