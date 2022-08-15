@@ -93,6 +93,8 @@
 
 body {
   background-color: var(--colorBackground);
+  overflow-x: hidden;
+  overflow-y: scroll;
 }
 #outputDrawingWrapper {
   margin: 0;
