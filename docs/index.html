@@ -182,12 +182,9 @@
     // expanded|not-expanded - all its peers shown
     const s = (window.s = {
       // to check browser state bc js/drawing breaks if loads in hidden tab
-      isVisible: document.visibilityState !== 'hidden',
+      isVisible: !isTabHidden(),
       // 'light' or 'dark' color scheme
-      colorScheme:
-        localStorage.getItem('colorScheme') === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light',
+      colorScheme: localStorage.getItem('colorScheme') === 'light' ? 'light' : 'dark',
       // easy access to dark-style <style> element here when used
       colorSchemeStyleEl: undefined,
       // whether items are added to visualizer
@@ -207,7 +204,7 @@
     })
 
     // load up the visjs network drawing when tab visible
-    while (document.visibilityState === 'hidden') await new Promise(res => setTimeout(res, 1000))
+    while (isTabHidden()) await new Promise(res => setTimeout(res, 1000))
     const visDrawing = new vis.Network(
       window.outputDrawing,
       {
@@ -222,13 +219,11 @@
     document.addEventListener(
       'visibilitychange',
       e => {
-        if (document.visibilityState === 'hidden') {
-          s.isVisible = false
+        if (isTabHidden()) {
           console.log('document hidden')
           visDrawing.stopSimulation()
           visDrawing.renderer.allowRedraw = false
         } else {
-          s.isVisible = true
           console.log('document not hidden')
           visDrawing.renderer.allowRedraw = true
           visDrawing.startSimulation()
@@ -346,7 +341,7 @@
     // parse nodes to finalize what we see
     const finalizeVisualization = async () => {
       // wait until browser tab is open and visible for js to work
-      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+      await waitUntilVisible()
 
       // update buttons
       toggleRemoveOtherChans.innerHTML = s.removeChannelsOfNonExpanded
@@ -378,7 +373,7 @@
       console.log(`${listOfLoneNodes.length} unattached nodes removed`)
       if (listOfLoneNodes.length) removeNodesFromVis(listOfLoneNodes)
 
-      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+      await waitUntilVisible()
 
       // remove all channels where either peer is no longer visualized
       const listOfBrokenChannels = []
@@ -390,7 +385,7 @@
       console.log(`${listOfBrokenChannels.length} broken channels removed`)
       if (listOfBrokenChannels.length) removeChannelsFromVis(listOfBrokenChannels)
 
-      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+      await waitUntilVisible()
 
       // check for secondary channels to add or remove
       const channelsToTryAdding = []
@@ -425,7 +420,7 @@
         console.log(`${countAdded} new second order channels added`)
       }
 
-      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+      await waitUntilVisible()
 
       // determine hidden status of non-common peers
       s.visibleNodes = {}
@@ -550,12 +545,12 @@
         visEdge.smooth = isComplexScene ? false : visEdge.smooth
       }
 
-      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+      await waitUntilVisible()
 
       visNodes.updateOnly(visualizedNodes)
       visChannels.updateOnly(visualizedChans)
 
-      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+      await waitUntilVisible()
 
       if (isComplexScene) {
         visDrawing.setOptions({ physics: complexScenePhysics })
@@ -574,7 +569,7 @@
         console.log('using defaultPhysics', JSON.stringify(options.physics, null, 2))
       }
 
-      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+      await waitUntilVisible()
 
       // update hover text
       updateFloatingInfo()
@@ -590,7 +585,7 @@
         s
       })
 
-      while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+      await waitUntilVisible()
 
       // restart physics if was stopped
       visDrawing.startSimulation()
@@ -609,8 +604,7 @@
 
       // zoom fix a little later
       setTimeout(async () => {
-        while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
-        visDrawing.fit({ animation: { duration: 100 } })
+        if (!isTabHidden()) visDrawing.fit({ animation: { duration: 100 } })
       }, 1337)
     }
 
@@ -950,9 +944,10 @@
     visDrawing.on('resize', () => {
       clearTimeout(handleResizeFitTimeout)
       handleResizeFitTimeout = setTimeout(async () => {
-        while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
-        console.log('resize done detected, refitting graph')
-        s.isVisible && visDrawing.fit({ animation: { duration: 100 } })
+        if (!isTabHidden()) {
+          console.log('resize done detected, refitting graph')
+          visDrawing.fit({ animation: { duration: 100 } })
+        }
       }, 500)
     })
 
@@ -1081,7 +1076,7 @@
     }
 
     // wait until browser tab visible
-    while (!s.isVisible) await new Promise(res => setTimeout(res, 1000))
+    await waitUntilVisible()
 
     // set up scene with starting nodes chosen
     addGraphNodesToVis(startingNodes)
@@ -1413,6 +1408,11 @@
       tries++
     }
     return res
+  }
+
+  const isTabHidden = () => document.visibilityState === 'hidden'
+  const waitUntilVisible = async () => {
+    while (isTabHidden()) await new Promise(res => setTimeout(res, 1000))
   }
 
   const clrCheck = (hex = '#888888') => {
