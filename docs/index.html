@@ -4,30 +4,32 @@
 <link rel="stylesheet" href="index.css" />
 
 <!-- divs -->
+<a id="top"></a>
 <div id="outputDrawingWrapper">
   <div id="outputDrawing"></div>
   <div id="outputDrawingInfo"></div>
-  <div id="openConfig">
+  <div id="openConfig" class="button">
     settings
   </div>
   <div id="configs">
-    <div id="closeConfig">
+    <div id="closeConfig" class="button">
       close settings
     </div>
     <div id="configScrollWrapper">
-      <div id="toggleRemoveOtherNodes" class="toggle">hide secondary nodes</div>
-      <div id="toggleRemoveOtherChans" class="toggle">show secondary channels</div>
+      <!-- <div id="toggleRemoveOtherNodes" class="toggle">hide secondary nodes</div> -->
+      <!-- <div id="toggleRemoveOtherChans" class="toggle">show secondary channels</div> -->
       <div id="toggleFullScreen" class="toggle">toggle full screen</div>
       <div id="toggleDarkMode" class="toggle">toggle dark mode</div>
     </div>
   </div>
+  <div id="drawingResizer" class="drawing-resizer"></div>
 </div>
 <div id="expandedTags"></div>
 <input id="expNew" list="bestsuggestions" autocomplete="off" placeholder="add by alias or pubkey" />
 <datalist id="bestsuggestions"></datalist>
 <div id="outputText"></div>
-
 <div id="debugText"></div>
+<a id="goback" href="#top" class="button">UP</a>
 
 <!-- ipfs library, used via global Ipfs -->
 <script
@@ -64,7 +66,7 @@
 <!-- main script -->
 <script type="text/javascript" defer>
   const { keys, values, entries } = Object
-  const { max, min, trunc, ceil, floor, round } = Math
+  const { max, min, trunc, ceil, floor, round, sqrt } = Math
 
   const graphIPNS = '12D3KooWScrMbdX4eCmfjT2BM2iyX1Nf8rrUZUYNjvHNKtwxfBzD'
 
@@ -89,10 +91,13 @@
       searchParams.getAll('node')
     : // adding few first expanded small nodes to use as initial examples
       [
+        '021c97a90a411ff2b10dc2a8e32de2f29d2fa49d41bfbb52bd416e460db0747d0d', // LOOP
         // '02e8980ad9bf9fca93e306e774c480cbcf36d8afde2a80a797314a70b19690b06c', // PrentizMN
         '020e6dd9f90cc37f2a7b5e881b6ecb6fe07f60d86416f34c63d8264356649fd8cb', // kycjelly
-        '03387ffd0c54c78604fe0bfba1714655a8f77b266346911f1923946c54e8d3318c', // animal plebnet
-        '028e9e578efe5f09f3edfd98ef0fad51007014401d8b7ff62236b89d6867529635' // sweet16joe
+        // '03387ffd0c54c78604fe0bfba1714655a8f77b266346911f1923946c54e8d3318c', // animal plebnet
+        // '028e9e578efe5f09f3edfd98ef0fad51007014401d8b7ff62236b89d6867529635', // sweet16joe
+        '03f80288f858251aed6f70142fab79dede5427a0ff4b618707bd0a616527a8cec7' // hellojessica
+        // '03dd09855c3634daa5c7de0146f4d54eb395b51ae422bc86ee1132a0d7ed50e720', // hades
         // '03c7b849b67f8c5fdbc3bc2d140bf45924d7492a687ede91d3dd67570f50b62abe' // WBD
       ]
 
@@ -200,19 +205,76 @@
       // whether we allow nodes without expanded peers
       hideNodesWithoutExpandedPeers: false,
       // whether we allow channels between non-expanded peers
-      removeChannelsOfNonExpanded: true
+      removeChannelsOfNonExpanded: true,
+      // width based on number of channels with same peer
+      capacityWidths: true,
+      // make it so repulsion is based on count of peers in graph, not just those rendered
+      correctRepulsion: false,
+      // use geom avg of fee rates to calc channel length
+      feeLengths: false,
+      // stops simulation on a timer
+      autoStop: false
     })
 
-    // load up the visjs network drawing when tab visible
-    while (isTabHidden()) await new Promise(res => setTimeout(res, 1000))
-    const visDrawing = new vis.Network(
-      window.outputDrawing,
+    const myToggles = [
       {
-        nodes: visNodes,
-        edges: visChannels
+        buttonId: 'toggleRemoveOtherNodes',
+        name: 'hideNodesWithoutExpandedPeers',
+        valuesAndLabels: [
+          { value: true, label: 'hiding secondary nodes' },
+          { value: false, label: 'showing secondary nodes' }
+        ]
       },
-      visOptions
-    )
+      {
+        buttonId: 'toggleRemoveOtherChans',
+        name: 'removeChannelsOfNonExpanded',
+        valuesAndLabels: [
+          { value: true, label: 'hiding secondary channels' },
+          { value: false, label: 'showing secondary channels' }
+        ]
+      },
+      {
+        buttonId: 'toggleCapacityWidths',
+        name: 'capacityWidths',
+        valuesAndLabels: [
+          { value: false, label: 'channel widths are constant' },
+          { value: true, label: 'channel width scaling w/ capacity' }
+        ]
+      },
+      {
+        buttonId: 'toggleCorrectRepulsion',
+        name: 'correctRepulsion',
+        valuesAndLabels: [
+          { value: false, label: 'repulsion scaling w/ visible' },
+          { value: true, label: 'repulsion scaling w/ graph n' }
+          // { value: 2, label: 'repulsion constant' } // need exact eq...
+        ]
+      },
+      {
+        buttonId: 'toggleFeeLengths',
+        name: 'feeLengths',
+        valuesAndLabels: [
+          { value: false, label: 'channel springs constant' },
+          { value: true, label: 'channel springs scaling w/ fee avg' }
+        ]
+      },
+      {
+        buttonId: 'toggleAutoStop',
+        name: 'autoStop',
+        valuesAndLabels: [
+          { value: false, label: 'simulation unrestricted' },
+          { value: true, label: 'simulation stops every 2s' }
+        ]
+      },
+      {
+        buttonId: 'toggleRenderScale',
+        name: 'renderScale',
+        valuesAndLabels: [
+          { value: 2, label: 'render scale = 2' },
+          { value: 1, label: 'render scale = 1' }
+        ]
+      }
+    ].reverse()
 
     // infinite issues come up when loading while in hidden tab so listen for it
     // https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API
@@ -231,6 +293,13 @@
       },
       false
     )
+
+    // handles s.autoStop
+    setInterval(() => {
+      if (s.autoStop) {
+        if (!visDrawing.physics.stabilized) visDrawing.stopSimulation()
+      }
+    }, 2000)
 
     // take array of pubkeys and add nodes from graph to vis
     const addGraphNodesToVis = newPubKeys => {
@@ -276,7 +345,7 @@
         const node1 = graph[newPubkeys[0]]
         const node2 = graph[newPubkeys[1]]
         if (!s.addedChannels[chanId]) {
-          const mainColor = avgHex(node1.color, node2.color) // avg of both nodes
+          const mainColor = avgHex2(node1.color, node2.color) // avg of both nodes
           newVisChannelsToAdd.push({
             from: node1.public_key,
             to: node2.public_key,
@@ -338,18 +407,70 @@
       // cleanup in finalizeVisualization()
     }
 
+    const updateButtons = () => {
+      // go through all my settings
+      for (const setting of myToggles) {
+        const { valuesAndLabels, buttonId, name } = setting
+
+        // debug bad state setting name
+        // if (s[name] === undefined) {
+        //   console.error(window[buttonId], s[name])
+        // }
+
+        // if button doesn't exist (on first load)
+        if (!window[buttonId]) {
+          window.configScrollWrapper.insertAdjacentHTML(
+            'afterbegin', // at start
+            `<div id="${buttonId}" class="toggle"></div>`
+          )
+        }
+
+        // find which value & label matches current setting
+        let i = valuesAndLabels.findIndex(val => val.value === s[name])
+        let current = valuesAndLabels[i]
+        if (i === -1) {
+          console.log('adding setting', name)
+          i = 0 // default to 1st item
+          current = valuesAndLabels[i]
+          s[name] = valuesAndLabels[i].value
+        }
+        // set button label to match value
+        window[buttonId].innerHTML = current.label
+        // overwrite what buttons do on click event
+        window[buttonId].onclick = () => {
+          // change value to next value
+          const iNew = (i + 1) % valuesAndLabels.length // increase index until starting from 0 again
+          s[name] = valuesAndLabels[iNew].value
+          console.log(`setting ${name} was toggled from ${valuesAndLabels[i].value} to ${valuesAndLabels[iNew].value}`)
+          finalizeVisualization()
+        }
+      }
+
+      // window.toggleRemoveOtherChans.onclick = () => {
+      //   s.removeChannelsOfNonExpanded = !s.removeChannelsOfNonExpanded
+      //   finalizeVisualization()
+      // }
+
+      // window.toggleRemoveOtherNodes.onclick = () => {
+      //   s.hideNodesWithoutExpandedPeers = !s.hideNodesWithoutExpandedPeers
+      //   finalizeVisualization()
+      // }
+
+      // toggleRemoveOtherChans.innerHTML = s.removeChannelsOfNonExpanded
+      //   ? 'show secondary channels'
+      //   : 'hide secondary channels'
+      // toggleRemoveOtherNodes.innerHTML = s.hideNodesWithoutExpandedPeers
+      //   ? 'show secondary nodes'
+      //   : 'hide secondary nodes'
+    }
+
     // parse nodes to finalize what we see
-    const finalizeVisualization = async () => {
+    const finalizeVisualization = async (fitAfterMs = 1337) => {
       // wait until browser tab is open and visible for js to work
       await waitUntilVisible()
 
       // update buttons
-      toggleRemoveOtherChans.innerHTML = s.removeChannelsOfNonExpanded
-        ? 'show secondary channels'
-        : 'hide secondary channels'
-      toggleRemoveOtherNodes.innerHTML = s.hideNodesWithoutExpandedPeers
-        ? 'show secondary nodes'
-        : 'hide secondary nodes'
+      updateButtons()
 
       // set correct color scheme
       handleColorScheme()
@@ -487,11 +608,15 @@
         '--colorActive'
       ].map(prop => compStyle.getPropertyValue(prop)?.trim())
 
+      const UNEXPANDED_NODE_SIZE = 8
+      const EXPANDED_NODE_SIZE = 18
+      const NODE_BORDER_NORMAL = 1.5
+
       // apply styling to nodes
       const visualizedNodes = visNodes.get()
       for (const visNode of visualizedNodes) {
         const pk = visNode.id
-        visNode.size = s.isExpanded[pk] ? 18 : 8
+        visNode.size = s.isExpanded[pk] ? EXPANDED_NODE_SIZE : UNEXPANDED_NODE_SIZE
 
         // all colors
         const safeMainColor = clrCheck(visNode.mainColor)
@@ -503,19 +628,29 @@
           visNode.font = {
             color: colorText,
             strokeColor: colorBackground,
-            size: 27,
-            strokeWidth: 7,
+            size: FONT_SIZE_MIN_VU,
+            strokeWidth: +(FONT_SIZE_MIN_VU / 4).toFixed(3),
             bold: true
           }
         } else {
           visNode.font = {
             color: colorText,
             // strokeColor: colorBackground, // too slow
-            size: 18,
+            size: FONT_SIZE_MIN_VU,
             // strokeWidth: 6, // too slow
             strokeWidth: 0, // to undo expanded setting
             bold: true
           }
+        }
+
+        if (s.correctRepulsion) {
+          // atlas physics are based on mass * number of edges it has
+          // however we do not draw all edges it has so can correct it
+          const { channelCount } = graph[pk]
+          const countScenePeers = keys(s.addedNodes[pk]).filter(theirPeer => !!s.addedNodes[theirPeer]).length
+          visNode.mass = -~(1 / (countScenePeers / channelCount)) || 1 // round up
+        } else {
+          visNode.mass = 1
         }
 
         // physics
@@ -532,7 +667,7 @@
         visEdge.color ??= {}
         visEdge.color.color = s.fromExpanded[visEdge.id] // depends on if of expanded node
           ? avgHex(visEdge.mainColor, colorBackground, 0.75) // slight dim for primary channels
-          : avgHex(visEdge.mainColor, colorBackground, 0.25) // heavy dim for secondary channels
+          : avgHex(visEdge.mainColor, colorBackground, 0.01) // heavy dim for secondary channels
         visEdge.color.hover = '#FF9900' // hover color
         visEdge.color.highlight = '#FF9900' // selected color
         visEdge.hidden = !s.visibleChannels[visEdge.id]
@@ -541,8 +676,38 @@
         // visEdge.physics = !visEdge.hidden
         // simplify edge if physics is disabled (e.g. hidden or secondary channel)
 
+        // dynamic channels have hidden repulsion physics, more expensive calc
         visEdge.smooth = visEdge.physics ? { type: 'dynamic' } : false
         visEdge.smooth = isComplexScene ? false : visEdge.smooth
+
+        // adjust channel widths
+        if (s.capacityWidths) {
+          const channels = edgeToGraph({ edge: visEdge })
+          let capacity = 0
+          for (const channel of channels) {
+            capacity += max(+channel?.local?.max_htlc_mtokens || 0, +channel?.remote?.max_htlc_mtokens || 0) / 1000
+          }
+          const timesWumbo = capacity / 16777215
+          // width from wumbo sizes
+          visEdge.width =
+            capacity >= 1e6 ? clamp(1, +timesWumbo.toFixed(1), UNEXPANDED_NODE_SIZE + NODE_BORDER_NORMAL * 2) : 0.5
+          // visEdge.capacity = capacity
+          // visEdge.timesWumbo = timesWumbo
+          // visEdge.idealWidth = +(timesWumbo / 2).toFixed(1)
+        } else {
+          visEdge.width = 1 // default
+        }
+
+        if (s.feeLengths) {
+          const channels = edgeToGraph({ edge: visEdge })
+          const channel = channels[0]
+          // const feeTotal = (0.5 * channel.local.fee_rate + 0.5 * channel.remote.fee_rate) | 0
+          // const feeAvg = sqrt((channel.local.fee_rate || 1) * (channel.remote.fee_rate || 1)) | 0
+          const feeAvg = sqrt(0.5 * (channel.local.fee_rate || 1) ** 2 + 0.5 * (channel.remote.fee_rate || 1) ** 2) | 0
+          visEdge.length = clamp(10, feeAvg, 10000)
+        } else {
+          visEdge.length = 300 // default
+        }
       }
 
       await waitUntilVisible()
@@ -559,10 +724,9 @@
         visDrawing.setOptions({ physics: smallSetPhysics })
         console.log('using smallSetPhysics', JSON.stringify(smallSetPhysics, null, 2))
       } else {
-        const clamp = (num, low, high) => min(max(num, low), high)
         const copy = item => JSON.parse(JSON.stringify(item))
         const options = copy({ physics: defaultPhysics }) // deep copy
-        options.physics.forceAtlas2Based.theta = clamp(Math.exp(-100 / countShownNodes), 0.5, 0.96)
+        options.physics.forceAtlas2Based.theta = clamp(0.5, Math.exp(-100 / countShownNodes), 0.96)
         options.physics.forceAtlas2Based.damping = options.physics.forceAtlas2Based.theta
         options.physics.forceAtlas2Based.avoidOverlap = 0.001
         visDrawing.setOptions(options)
@@ -587,10 +751,32 @@
 
       await waitUntilVisible()
 
+      // update render scale
+      custom.pixelRatioMultiplier = s.renderScale
+
       // restart physics if was stopped
       visDrawing.startSimulation()
       visDrawing.renderer.allowRedraw = true
 
+      // sortRenderOrder() // already part of handleZoom
+      handleZoom() // make zoom based corrections
+
+      // hover physics freezes disabled
+      // visDrawing.setOptions({ interaction: { hover: false } })
+
+      // fit a little later
+      setTimeout(async () => {
+        // wait until visible instead here?
+        if (!isTabHidden()) visDrawing.fit({ animation: { duration: 100 } })
+        // adjust for zoom again
+        handleZoom()
+
+        // hover physics freezes enabled
+        // visDrawing.setOptions({ interaction: { hover: true } })
+      }, fitAfterMs)
+    }
+
+    const sortRenderOrder = () => {
       // change order of edges in renderer to determine what's drawn on top of what
       // visDrawing.body.edgeIndices.sort((a, b) => Math.random() - 0.5)
       if (!s.removeChannelsOfNonExpanded) {
@@ -601,26 +787,11 @@
         // put expanded nodes later in array, , higher index = drawn on top
         visDrawing.body.nodeIndices.sort((a, b) => +!!s.isExpanded[a] - +!!s.isExpanded[b])
       }
-
-      // zoom fix a little later
-      setTimeout(async () => {
-        if (!isTabHidden()) visDrawing.fit({ animation: { duration: 100 } })
-      }, 1337)
     }
 
     // ----------------------------------
     // --- user input responses below ---
     // ----------------------------------
-
-    window.toggleRemoveOtherChans.onclick = () => {
-      s.removeChannelsOfNonExpanded = !s.removeChannelsOfNonExpanded
-      finalizeVisualization()
-    }
-
-    window.toggleRemoveOtherNodes.onclick = () => {
-      s.hideNodesWithoutExpandedPeers = !s.hideNodesWithoutExpandedPeers
-      finalizeVisualization()
-    }
 
     toggleFullScreen.onclick = () => handleToggleFullScreen()
 
@@ -666,6 +837,7 @@
           --colorHover: var(--colorHover${schemeType}) !important;
           --colorActive: var(--colorActive${schemeType}) !important;
           --visButtonFilter: grayscale(1) contrast(1) invert(${s.colorScheme === 'dark' ? '1' : '0'}) !important;
+          color-scheme: ${s.colorScheme};
         }
       `
       s.colorSchemeStyleEl.innerHTML = css
@@ -676,6 +848,7 @@
       // }
     }
 
+    // node suggestions while typing
     const updateTags = () => {
       // edit quick tags (refactor later)
       while (expandedTags.firstChild) expandedTags.removeChild(expandedTags.firstChild)
@@ -693,7 +866,7 @@
         if (thisSpan)
           thisSpan.onclick = () => {
             console.log('clicked', alias, 'tag')
-            handleNodeDoubleClick(pk) // same thing as doubleclicking
+            handleNodeExpandRequest(pk) // same thing as doubleclicking
           }
       }
 
@@ -745,14 +918,14 @@
         bestsuggestions.innerHTML = ''
         found.forEach(f => {
           const nChans = graph[f.public_key].channelCount || 0
-          const option = `<option value="${f.public_key}" label="${f.alias} | ${f.public_key} | ${nChans}">`
+          const option = `<option value="${f.public_key}" label="${f.alias} | ${nChans} | ${f.public_key}">`
           bestsuggestions.insertAdjacentHTML('beforeend', option)
         })
       }
       return true
     }
 
-    // autocomplete suggestions helper
+    // closest node suggestions from string
     const checkGraphFor = str => {
       const MAX_N_ITEMS = 5
       const perfectResults = []
@@ -788,7 +961,7 @@
       const countIndirectChannels = countShownChannels - countDirectChannels
       const triangleFactor = ((countIndirectChannels / countDirectChannels) * 100)?.toFixed(0)
       const statsDirectIndirect =
-        countDirectChannels && !s.removeChannelsOfNonExpanded
+        countDirectChannels && !s.removeChannelsOfNonExpanded && !s.hideNodesWithoutExpandedPeers
           ? `(${countDirectChannels} direct, ${countIndirectChannels} indirect, ${triangleFactor}%)`
           : ''
       const otherNodes = s.hideNodesWithoutExpandedPeers ? 'only common peers' : 'all peers'
@@ -847,20 +1020,33 @@
       const alias1 = (graph[pk1].alias || pk1.slice(0, 20)).padStart(20)
       const alias2 = graph[pk2].alias || pk2.slice(0, 20) //.padEnd(20)
 
+      // assume these are same for all channels b/w same peers
       const rate1 = chs[0].local.fee_rate?.toFixed(0).padStart(16)
       const rate2 = chs[0].remote.fee_rate?.toFixed(0) //.padEnd(16)
       const mbase1 = chs[0].local.base_fee_mtokens.padStart(16)
       const mbase2 = chs[0].remote.base_fee_mtokens //.padEnd(16)
+      const cltvd1 = chs[0].local.cltv_delta.toFixed(0)
+      const cltvd2 = chs[0].remote.cltv_delta.toFixed(0)
 
+      let totalCapacityEst = 0
+      for (ch of chs) totalCapacityEst += max(+ch.local.max_htlc_mtokens || 0, +ch.remote.max_htlc_mtokens || 0)
+      const capacitySats = pretty((totalCapacityEst / 1000).toFixed(0))
+      const offset = ' '.repeat((20 - capacitySats.length / 2) | 0)
+      // 20 from :,
       // prettier-ignore
       const info = [
         `                 ${alias1}   ${alias2}`,
         `         rate /ppm:  ${rate1}   ${rate2}`,
         `       base /msats:  ${mbase1}   ${mbase2}`,
+        `cltv_delta /blocks:              ${cltvd1.padStart(4)}   ${cltvd2}`,
+
+        `\n  total est. /sats:${offset}${capacitySats}`,
+
+        // for every channel
         ...chs.map(c => [
           `\n ${c.id.padStart(17)}:          ${c.local.is_disabled ? 'disabled' : '        '}   ${c.remote.is_disabled ? 'disabled' : '        '}`,
           `    max htlc /sats:  ${pretty(c.local.max_htlc_mtokens * 1e-3).padStart(16)}   ${pretty(c.remote.max_htlc_mtokens * 1e-3)} `,
-          `cltv_delta /blocks:              ${c.local.cltv_delta.toFixed(0).padStart(4)}   ${c.remote.cltv_delta}`,
+          // `cltv_delta /blocks:              ${c.local.cltv_delta.toFixed(0).padStart(4)}   ${c.remote.cltv_delta}`,
           `                     ${c.local.updated_at.replace(/[ZT]/g, ' ').slice(0, -8)}   ${c.remote.updated_at.replace(/[ZT]/g, ' ').slice(0, -8)}`,
         ].join('\n')
         ),
@@ -872,22 +1058,76 @@
 
     // click
     visDrawing.on('selectNode', e => {
-      console.log('clicked on node', visNodes.get(e.nodes))
+      console.log('clicked on node', visNodes.get(e.nodes[0]))
     })
 
     // click
     visDrawing.on('selectEdge', e => {
-      console.log('clicked on edge', visChannels.get(e.edges))
+      console.log('clicked on edge', visChannels.get(e.edges[0]))
     })
 
     // flickering hover actions while dragging are annoying
     visDrawing.on('dragStart', e => {
-      visDrawing.setOptions({ interaction: { hover: false } })
+      const isNode = !!e.nodes[0]
+      if (!isNode) visDrawing.setOptions({ interaction: { hover: false } })
       visRemoveHighlights()
     })
     visDrawing.on('dragEnd', e => {
-      visDrawing.setOptions({ interaction: { hover: true } })
+      setTimeout(() => {
+        visDrawing.setOptions({ interaction: { hover: true } })
+        visDrawing.redraw()
+      }, 1000)
     })
+
+    // font scaling
+    let isHandlingZoom = false
+    const handleZoom = e => {
+      if (isHandlingZoom) return null // only one at a time
+      isHandlingZoom = true // mark busy
+      // get css-like window properties
+      const [vw, vh] = [window.innerWidth, window.innerHeight].map(v => v / 100)
+      const scale = +(e?.scale || visDrawing.getScale()).toFixed(3)
+      const fontSizeRU = +((vw + vh) * 0.6).toFixed(3)
+      const fontSizeVU = +clamp(FONT_SIZE_MIN_VU * 1.1, fontSizeRU / scale, FONT_SIZE_MIN_VU * 10).toFixed(3)
+      const strokeWidthVisUnits = +(fontSizeVU / 4).toFixed(3)
+      const nodesToUpdate = []
+      // go through just expanded nodes
+      for (const pk in s.isExpanded) {
+        if (!s.isExpanded[pk]) continue // skip unexpanded
+        const visNode = visNodes.get(pk)
+        visNode.font ??= {}
+        visNode.font.size = fontSizeVU
+        visNode.font.strokeWidth = strokeWidthVisUnits
+        nodesToUpdate.push(visNode)
+      }
+      visNodes.updateOnly(nodesToUpdate)
+      /*
+      console.log(
+        'zoom handled',
+        JSON.stringify(
+          {
+            vw,
+            vh,
+            fontSizeVU,
+            scale,
+            strokeWidthVisUnits,
+            unclamped: +((vw + vh) * 0.75).toFixed(3)
+          },
+          null,
+          2
+        )
+      )
+      */
+
+      // put things back in order
+      sortRenderOrder()
+
+      isHandlingZoom = false // done w/ this update
+      // setTimeout(() => {
+      //   isHandlingZoom = false
+      // }, 100)
+    }
+    visDrawing.on('zoom', handleZoom)
 
     // hover over nodes
     visDrawing.on('hoverNode', e => {
@@ -901,7 +1141,7 @@
     // hover over channels
     visDrawing.on('hoverEdge', e => {
       // console.log('hoverEdge', e)
-      // visDrawing.stopSimulation()
+      visDrawing.stopSimulation()
     })
 
     // when hover ends
@@ -940,16 +1180,30 @@
     // handleToggleFullScreen() // toggle full screen
     // })
 
+    // only fit if haven't resized for 1/2 second
     let handleResizeFitTimeout
     visDrawing.on('resize', () => {
       clearTimeout(handleResizeFitTimeout)
       handleResizeFitTimeout = setTimeout(async () => {
+        // wait until visible here?
         if (!isTabHidden()) {
           console.log('resize done detected, refitting graph')
           visDrawing.fit({ animation: { duration: 100 } })
+          handleZoom()
         }
       }, 500)
     })
+
+    // stop animation until mouse stops moving for 1/2 second
+    // let handleMouseMoveTimeout
+    // outputDrawingWrapper.onmousemove = e => {
+    //   if (e.buttons) return null // no dragging
+    //   visDrawing.stopSimulation()
+    //   clearTimeout(handleMouseMoveTimeout)
+    //   handleMouseMoveTimeout = setTimeout(async () => {
+    //     if (!isTabHidden()) visDrawing.startSimulation()
+    //   }, 500)
+    // }
 
     // listen for changes in fullscreen status (bc many ways to exit fs)
     const handleFullScreenStyles = () => {
@@ -989,8 +1243,16 @@
       closeConfig.onclick()
     }
 
+    // convert edge id or edge to graph channels arrays
+    const edgeToGraph = ({ id, edge }) => {
+      if (id) edge = visChannels.get(id)
+      const { from, to } = edge
+      const channels = graph[from].channels[to]
+      return channels
+    }
+
     // click for changes in doubleclicks / expansions / collapses
-    const handleEdgeDoubleClick = async edgeId => {
+    const handleEdgePrintout = async edgeId => {
       const visEdge = visChannels.get(edgeId)
       const { from, to } = visEdge
       const fromAlias = graph[from].alias || from.slice(0, 20)
@@ -998,47 +1260,66 @@
       const selChans = graph[from].channels[to]
 
       logReset() // clear log
-      log(`summary of ${selChans.length} channels ${fromAlias}-${toAlias}:`)
+      log(`${selChans.length} channel${selChans.length > 1 ? 's' : ''} between ${fromAlias} & ${toAlias}`)
+
+      const showTotal = {}
       for (const selChan of selChans) {
-        logObject(
-          {
-            id: selChan.id,
-            [fromAlias]: selChan.local,
-            [toAlias]: selChan.remote
-          },
-          4
-        )
+        const showForChannel = {
+          ...selChan,
+          [fromAlias]: selChan.local,
+          [toAlias]: selChan.remote
+        }
+        delete showForChannel.local // replaced
+        delete showForChannel.remote // replaced
+        showTotal[selChan.id] = showForChannel
       }
+      logObject(showTotal, selChans.length > 1 ? 1 : 4)
     }
 
-    const showJsonViewerGraphOf = async selectedPubKey => {
+    const handleNodePrintout = async selectedPubKey => {
       const selNode = graph[selectedPubKey]
       logReset() // clear detailed info
-      log(`summary of graph for node ${selNode.alias || selectedPubKey.slice(0, 20)}:`)
+      log(
+        `${selNode.alias} | ${selectedPubKey} | <a href="https://amboss.space/node/${selectedPubKey}" target="_blank">amboss.space</a>`
+      )
+      log(`summary graph:`)
       await logObject(selNode, 2)
     }
 
-    const handleNodeDoubleClick = async selectedPubKey => {
+    const handleNodeExpandRequest = async selectedPubKey => {
       // toggle expanded status
       if (!s.isExpanded[selectedPubKey]) expandNode(selectedPubKey)
       else unexpandNode(selectedPubKey)
 
-      // write out detailed info below
-      await showJsonViewerGraphOf(selectedPubKey)
-
-      finalizeVisualization()
+      finalizeVisualization(2222)
     }
+
+    let recentClick = false
+    visDrawing.on('click', async p => {
+      // don't repeat on doube click < 500ms
+      if (recentClick) return console.log('click ignored, doubeclick detected')
+      recentClick = true
+      setTimeout(() => (recentClick = false), 500)
+
+      const selectedPubKey = p?.nodes?.[0]
+      const selectedEdge = p?.edges?.[0]
+      console.log('double-clicked', selectedPubKey || selectedEdge || 'nothing')
+      if (!selectedPubKey && !selectedEdge) return null
+
+      if (selectedPubKey) await handleNodePrintout(selectedPubKey)
+      else handleEdgePrintout(selectedEdge)
+    })
 
     visDrawing.on('doubleClick', async p => {
       const selectedPubKey = p?.nodes?.[0]
       const selectedEdge = p?.edges?.[0]
       console.log('double-clicked', selectedPubKey || selectedEdge || 'nothing')
       if (!selectedPubKey && !selectedEdge) return null
-      if (!selectedPubKey && selectedEdge) {
-        handleEdgeDoubleClick(selectedEdge)
-        return null
-      }
-      handleNodeDoubleClick(selectedPubKey)
+      // if (!selectedPubKey && selectedEdge) {
+      //   handleEdgePrintout(selectedEdge)
+      //   return null
+      // }
+      if (selectedPubKey) handleNodeExpandRequest(selectedPubKey)
     })
 
     // arbitrary clicks
@@ -1072,7 +1353,7 @@
       await logObject(nodes[1], 0)
     } else {
       // whatever is 1st node will be shown in detail below
-      showJsonViewerGraphOf(startingNodes[0])
+      handleNodePrintout(startingNodes[0])
     }
 
     // wait until browser tab visible
@@ -1117,7 +1398,7 @@
         {
           id,
           updated_at,
-          public_key: policy2.public_key,
+          public_key: policy2.public_key, // implies remote public key
           local: policy1,
           remote: policy2
         },
@@ -1127,7 +1408,7 @@
         {
           id,
           updated_at,
-          public_key: policy1.public_key,
+          public_key: policy1.public_key, // implies remote public key
           local: policy2,
           remote: policy1
         },
@@ -1177,7 +1458,8 @@
       .slice(0, -4)
 
   const log = (...args) => {
-    outputText.append(args.join(' ') + '\n')
+    // outputText.append(args.join(' ') + '\n')
+    outputText.insertAdjacentHTML('beforeend', args.join(' ') + '\n')
     console.log(args.join(' '))
   }
   const logReset = () => {
@@ -1191,7 +1473,7 @@
   }
   const logObject = async (obj, n = 2) => {
     const numChannels = obj.channels ? keys(obj.channels).length : 1
-    const breakLimit = ceil(max(numChannels / 10, 10))
+    const breakLimit = ceil(max(numChannels / 20, 20))
     const viewer = await BigJsonViewerDom.fromObject(obj, {
       objectNodesLimit: breakLimit,
       arrayNodesLimit: breakLimit
@@ -1205,13 +1487,23 @@
   // get ipns address and return array of cid strings it resolves to
   const getFromIPNS = async address => {
     if (!address.includes('ipns')) address = '/ipns/' + address
-    logD(`IPFS: attempting to resolve ${address} ...`)
+    logD(`IPFS: attempting to resolve ${address} ... (refresh browser if stuck)`)
 
     try {
       const cids = []
       // const nocache = false // block use of cached results?
 
-      const name = await doUntilWorks(async () => await ipfsNode.resolve(address))
+      const name = await doUntilWorks(async () => await ipfsNode.resolve(address), {
+        onfail: async n => {
+          // every 5
+          if (n % 5 === 0) {
+            await ipfsNode.stop()
+            await ipfsNode.start()
+            await new Promise(res => setTimeout(res, 3000))
+          }
+        },
+        maxbackoff: 8000
+      })
 
       logD(`IPNS address ${address} resolved to ${name}`)
       cids.push(name.replace('/ipfs/', '')) // just need cid hash
@@ -1274,7 +1566,7 @@
       damping: 4.2,
       springConstant: 0.21,
       centralGravity: 0.001,
-      springLength: 400
+      springLength: 300
     }
   }
   const smallSetPhysics = {
@@ -1284,7 +1576,7 @@
       damping: 3.1415,
       springConstant: 0.021,
       centralGravity: 0.001,
-      springLength: 200
+      springLength: 300
     }
   }
   const defaultPhysics = {
@@ -1293,11 +1585,13 @@
       theta: 0.5, // overwritten based on scene
       damping: 0.5, // overwritten based on scene
       springConstant: 0.06,
-      springLength: 400,
+      springLength: 300,
       centralGravity: 0.005
     }
   }
   const visOptions = {
+    // width: '200%',
+    // height: '200%',
     nodes: {
       shape: 'dot',
       size: 8,
@@ -1312,7 +1606,7 @@
       // }
     },
     edges: {
-      width: 1,
+      width: 1, // overwritten currently at finalizeVisualization
       selectionWidth: 3, // added to width on selection
       hoverWidth: 3 // added to width on hover
       // color: {
@@ -1364,6 +1658,20 @@
     }
   }
 
+  const isTabHidden = () => document.visibilityState === 'hidden'
+  const waitUntilVisible = async () => {
+    while (isTabHidden()) await new Promise(res => setTimeout(res, 1000))
+  }
+
+  const visDrawing = (window.visDrawing = new vis.Network(
+    window.outputDrawing,
+    {
+      nodes: visNodes,
+      edges: visChannels
+    },
+    visOptions
+  ))
+
   const hexToHsl = hex => {
     const r = ('0x' + hex[1] + hex[2]) / 255
     const g = ('0x' + hex[3] + hex[4]) / 255
@@ -1391,8 +1699,18 @@
     }
     return `#${f(0)}${f(8)}${f(4)}`
   }
+  const clamp = (low, num, high) => min(max(num, low), high)
 
-  const doUntilWorks = async (task, time = 5 * 1000) => {
+  const doUntilWorks = async (
+    task, // what to run
+    {
+      time = 1 * 1000,
+      maxbackoff = 21 * 1000,
+      name = '',
+      // run each time it fails, input is attempt it's at now
+      onfail = async () => {}
+    } = {}
+  ) => {
     let tries = 1
     let success = false
     let res
@@ -1401,19 +1719,35 @@
         res = await task()
         success = true
       } catch (e) {
-        console.log('task failed, attempt', tries, ', error:', e.code || e)
+        console.log(`${name || 'task'} failed, attempt`, tries, ', error:', e.code || e)
+        await onfail(tries)
         console.log('retrying in', (time / 1000).toFixed(0), 'seconds')
-        await new Promise(res => setTimeout(res, time))
+        await new Promise(res => setTimeout(res, time | 0))
+        time = min(time * 2, maxbackoff)
       }
       tries++
     }
     return res
   }
 
-  const isTabHidden = () => document.visibilityState === 'hidden'
-  const waitUntilVisible = async () => {
-    while (isTabHidden()) await new Promise(res => setTimeout(res, 1000))
+  // drawing resizing bar
+  const mouse = { y: 0, h: 0 }
+  const handleResizeMouseDown = e => {
+    const styles = window.getComputedStyle(window.outputDrawingWrapper)
+    mouse.y = e.clientY
+    mouse.h = parseInt(styles.height, 10)
+    document.addEventListener('mousemove', handleResizeMouseMove) // on drag
+    document.addEventListener('mouseup', handleResizeMouseUp) // on let go
   }
+  const handleResizeMouseMove = e => {
+    const dy = e.clientY - mouse.y
+    window.outputDrawingWrapper.style.height = `${mouse.h + dy}px`
+  }
+  const handleResizeMouseUp = e => {
+    document.removeEventListener('mousemove', handleResizeMouseMove)
+    document.removeEventListener('mouseup', handleResizeMouseUp)
+  }
+  window.drawingResizer.onmousedown = handleResizeMouseDown
 
   const clrCheck = (hex = '#888888') => {
     let { h, s, l } = hexToHsl(hex)
@@ -1421,10 +1755,39 @@
     // hsl(0,0,0.9 or 90%) is #e6e6e6 as brighest
     if (l > 0.9) l = 0.9
     // not to blend in with black background
-    // hsl(0,0,0.1 or 10%) is #1a1a1a as darkest
-    if (l < 0.1) l = 0.1
+    // hsl(0,0,0.2 or 20%) is #333333 as darkest
+    if (l < 0.2) l = 0.2
     return hslToHex({ h, s, l })
   }
+
+  // quadratic average
+  // https://sighack.com/post/averaging-rgb-colors-the-right-way
+  const avgHex2 = (hex1 = '#888888', hex2 = '#888888', fraction1 = 0.5) => {
+    const fraction2 = 1 - fraction1
+
+    const r1 = `0x${hex1[1]}${hex1[2]}`
+    const r2 = `0x${hex2[1]}${hex2[2]}`
+
+    const g1 = `0x${hex1[3]}${hex1[4]}`
+    const g2 = `0x${hex2[3]}${hex2[4]}`
+
+    const b1 = `0x${hex1[5]}${hex1[6]}`
+    const b2 = `0x${hex2[5]}${hex2[6]}`
+
+    const [rAvg, gAvg, bAvg] = [
+      (fraction1 * r1 ** 2 + fraction2 * r2 ** 2) ** 0.5,
+      (fraction1 * g1 ** 2 + fraction2 * g2 ** 2) ** 0.5,
+      (fraction1 * b1 ** 2 + fraction2 * b2 ** 2) ** 0.5
+    ].map(v =>
+      round(v)
+        .toString(16)
+        .padStart(2, '0')
+    )
+
+    return clrCheck(`#${rAvg}${gAvg}${bAvg}`)
+  }
+
+  // linear average
   const avgHex = (hex1 = '#888888', hex2 = '#888888', fraction1 = 0.5) => {
     const fraction2 = 1 - fraction1
     const r = fraction1 * `0x${hex1[1]}${hex1[2]}` + fraction2 * `0x${hex2[1]}${hex2[2]}`
@@ -1464,6 +1827,49 @@
     }
     return Promise.allSettled(promises)
   }
+
+  document.addEventListener('scroll', () => {
+    if (window.scrollY > window.innerHeight * 0.6 && window.goback.style.display !== 'block') {
+      window.goback.style.display = 'block'
+    }
+    if (window.scrollY < window.innerHeight * 0.4 && window.goback.style.display === 'block') {
+      window.goback.style.display = 'none'
+    }
+  })
+
+  const FONT_SIZE_MIN_VU = 18
+
+  // messing with canvas for quality
+  // https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Optimizing_canvas
+  // create solid color image (or can use ctx.fillRect, canvas.width, canvas.height) for saving w/ background
+  // https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/createImageData
+  // visDrawing.canvas.getContext('2d', { alpha: false })
+  // <a download="myImage.jpg" href="" onclick="download_img(this);">dl</a>
+  // download_img = function(el) { el.href = canvas.toDataURL("image/jpg", 1) }
+  // ctx.imageSmoothingQuality, ctx.imageSmoothingEnabled
+  // i ??= 0; custom.PIXEL_RATIO_MULTIPLIER = [1, 1.5, 2][i++ % 3]; visDrawing.redraw(); console.log(visDrawing.canvas.pixelRatio)
+  // visDrawing.setOptions({ width: '100%', height: '100%' })
+
+  // add in pixel ratio multiplier to alter render resolution
+  const custom = { pixelRatioMultiplier: 2 } // obj so linked by reference
+  visDrawing.canvas._determinePixelRatio = () => {
+    const ctx = visDrawing.canvas.getContext()
+    if (!ctx) throw new Error('could not get canvas context')
+    let r = 1
+    if (window) r = window.devicePixelRatio || 1
+
+    return (
+      (custom.pixelRatioMultiplier * r) /
+      (ctx.webkitBackingStorePixelRatio ||
+        ctx.mozBackingStorePixelRatio ||
+        ctx.msBackingStorePixelRatio ||
+        ctx.oBackingStorePixelRatio ||
+        ctx.backingStorePixelRatio ||
+        1)
+    )
+  }
+  // visDrawing.canvas._setPixelRatio = () =>
+  //   (visDrawing.canvas.pixelRatio = visDrawing.canvas._determinePixelRatio())
 
   logD('IPFS data is stored in indexedDB in browsers and is re-used on refresh w/o need to re-download')
 
