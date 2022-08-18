@@ -1069,7 +1069,8 @@
     // flickering hover actions while dragging are annoying
     visDrawing.on('dragStart', e => {
       const isNode = !!e.nodes[0]
-      if (!isNode) visDrawing.setOptions({ interaction: { hover: false } })
+      // after node dragging we halt hover for a bit
+      if (isNode) visDrawing.setOptions({ interaction: { hover: false } })
       visRemoveHighlights()
     })
     visDrawing.on('dragEnd', e => {
