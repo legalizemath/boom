@@ -13,7 +13,7 @@
   /* dark scheme */
   --colorTextDark: #eeeeee;
   --colorDebugDark: #b3333f;
-  --colorDataDark: #184183;
+  --colorDataDark: #3861a3;
   --colorBackgroundDark: #111111;
   --colorTagsDark: #555576;
   --colorTagsDeleteDark: #d0000d;
@@ -21,7 +21,8 @@
   --colorHoverDark: #222222;
   --colorActiveDark: #333333;
 
-  /* pick default */
+  /* pick a default for initial load */
+
   /*
   --colorText: var(--colorTextLight);
   --colorDebug: var(--colorDebugLight);
@@ -44,14 +45,16 @@
   --colorHover: var(--colorHoverDark);
   --colorActive: var(--colorActiveDark);
   --visButtonFilter: grayscale(1) contrast(1) invert(1);
+  color-scheme: dark; /* scroll bars etc. */
 
-  color-scheme: light dark;
+  /* color-scheme: light dark; */
   font-family: monospace;
   font-size: 12px;
+  font-size: max(min(12px, 2vmin), 9px);
   color: var(--colorText);
 }
 
-/* @media (not (prefers-color-scheme: dark)) {
+/* @media (prefers-color-scheme: light) {
   :root {
     --colorText: var(--colorTextLight);
     --colorDebug: var(--colorDebugLight);
@@ -63,11 +66,11 @@
     --colorHover: var(--colorHoverLight);
     --colorActive: var(--colorActiveLight);
     --visButtonFilter: grayscale(1) contrast(1) invert(0);
+    color-scheme: light;
   }
 } */
 
-/* to handle at first loading time */
-/* @media (prefers-color-scheme: dark) {
+/* @media (not (prefers-color-scheme: light)) {
   :root {
     --colorText: var(--colorTextDark);
     --colorDebug: var(--colorDebugDark);
@@ -79,6 +82,7 @@
     --colorHover: var(--colorHoverDark);
     --colorActive: var(--colorActiveDark);
     --visButtonFilter: grayscale(1) contrast(1) invert(1);
+    color-scheme: dark;
   }
 } */
 
@@ -91,23 +95,47 @@
   box-shadow: unset !important;
 }
 
+html::-webkit-scrollbar {
+  background: var(--colorBackground);
+}
+html::-webkit-scrollbar-thumb {
+  background: var(--colorActive);
+}
+
 body {
   background-color: var(--colorBackground);
   overflow-x: hidden;
   overflow-y: scroll;
 }
 #outputDrawingWrapper {
+  position: relative;
+
   margin: 0;
   padding: 0;
-  /* margin-top: 6px; */
-  /* margin-left: 6px; */
-  /* width: calc(100% - 12px); */
+
   width: 100%;
-  height: 80vh;
-  resize: vertical;
-  overflow: hidden;
-  border-bottom: 1px solid var(--colorOutlines);
+  height: 85vh;
+  max-height: calc(100vh - 5px);
+
+  /* resize: vertical; */
+  /* overflow: hidden; */
+  /* border-bottom: 1px solid var(--colorOutlines); */
+  outline: 1px solid var(--colorOutlines);
   background-color: var(--colorBackground);
+}
+.drawing-resizer {
+  position: absolute;
+  left: 0;
+  bottom: -5px;
+  height: 5px;
+  width: 100%;
+  cursor: row-resize;
+  opacity: 0;
+  background-color: var(--colorActive);
+  user-select: none;
+}
+.drawing-resizer:hover {
+  opacity: 1;
 }
 #outputText,
 #debugText,
@@ -118,6 +146,13 @@ body {
 }
 #outputText {
   padding: 12px;
+}
+#outputText a {
+  text-decoration: none;
+  color: var(--colorTags);
+}
+#outputText a:hover {
+  color: var(--colorData);
 }
 #debugText {
   padding: 12px;
@@ -194,12 +229,17 @@ input:focus {
 }
 #closeConfig,
 #openConfig,
-.toggle {
+.toggle,
+.button {
   text-align: center;
-  user-select: none;
   padding: 6px 12px;
   margin: 6px;
   cursor: pointer;
+  user-select: none;
+}
+.toggle::selection,
+.button::selection {
+  background-color: transparent;
 }
 #openConfig {
   display: none;
@@ -227,6 +267,35 @@ input:focus {
   overflow-x: hidden;
   direction: ltr;
 }
+#goback {
+  text-decoration: none;
+  border-radius: 100%;
+  width: 36px;
+  height: 36px;
+  display: none;
+  position: sticky;
+  bottom: 12px;
+  /* left: calc(50vw - 18px); */
+  margin: 12px auto;
+  background-color: var(--colorTags);
+  color: var(--colorText);
+  text-align: center;
+  padding: 12px;
+  opacity: 0.2;
+  user-select: none;
+}
+#goback:hover {
+  opacity: 0.7;
+}
+#goback:active {
+  opacity: 1;
+}
+
+.vis-network > canvas {
+  /* transform: scale(0.5); */
+  /* transform-origin: top left; */
+  filter: blur(0.45px);
+}
 
 /* internal vis */
 
@@ -246,7 +315,7 @@ input:focus {
   filter: grayscale(1) contrast(1);
   filter: var(--visButtonFilter);
   /* background-blend-mode: hard-light; */
-  opacity: 0.15;
+  opacity: 0.25;
 }
 .vis-button:hover {
   box-shadow: none !important;
@@ -347,7 +416,7 @@ input:focus {
   word-break: break-all;
   font-family: monospace !important;
   font-size: 12px !important;
-  border: 1px solid var(--colorOutlines) !important;
+  border: 1px solid var(--colorActive) !important;
   color: var(--colorText) !important;
   backdrop-filter: blur(10px) !important;
 }
